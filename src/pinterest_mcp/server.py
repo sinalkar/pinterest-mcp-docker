@@ -32,18 +32,30 @@ async def list_tools() -> list[types.Tool]:
     return [
         types.Tool(
             name="create_pin",
-            description="Create a new Pinterest pin with image, title, description, and optional link.",
+            description=(
+                "Create a new Pinterest pin. An image is always required — provide either "
+                "image_url (remote URL) or image_path (local file path). At least one must "
+                "be supplied; image_path takes precedence if both are given. "
+                "Use dry_run=true to validate without posting (useful during development — "
+                "note Pinterest has no sandbox; dry_run prevents any real API call)."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
                     "board_id": {"type": "string", "description": "Target board ID"},
                     "title": {"type": "string", "description": "Pin title"},
                     "description": {"type": "string", "description": "Pin description (include keywords)"},
-                    "image_url": {"type": "string", "description": "Publicly accessible image URL"},
+                    "image_url": {"type": "string", "description": "Publicly accessible image URL (mutually exclusive with image_path)"},
+                    "image_path": {"type": "string", "description": "Absolute local path to JPEG/PNG image (mutually exclusive with image_url)"},
                     "link": {"type": "string", "description": "Destination URL (e.g. Cults3D listing)"},
                     "alt_text": {"type": "string", "description": "Alt text for accessibility"},
+                    "dry_run": {"type": "boolean", "description": "If true, validate and return payload without posting. Pinterest has no sandbox — use this for testing.", "default": False},
                 },
-                "required": ["board_id", "title", "description", "image_url"],
+                "required": ["board_id", "title", "description"],
+                "oneOf": [
+                    {"required": ["image_url"]},
+                    {"required": ["image_path"]},
+                ],
             },
         ),
         types.Tool(
@@ -154,11 +166,12 @@ async def list_tools() -> list[types.Tool]:
         ),
         types.Tool(
             name="bulk_create_pins",
-            description="Create multiple pins on a board. Automatically rate-limited to 10/min.",
+            description="Create multiple pins on a board. Automatically rate-limited to 10/min. Each pin must include either image_url or image_path.",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "board_id": {"type": "string"},
+                    "dry_run": {"type": "boolean", "description": "Validate all pins without posting. Pinterest has no sandbox — use this for testing.", "default": False},
                     "pins": {
                         "type": "array",
                         "items": {
@@ -166,11 +179,16 @@ async def list_tools() -> list[types.Tool]:
                             "properties": {
                                 "title": {"type": "string"},
                                 "description": {"type": "string"},
-                                "image_url": {"type": "string"},
+                                "image_url": {"type": "string", "description": "Remote image URL"},
+                                "image_path": {"type": "string", "description": "Local image file path"},
                                 "link": {"type": "string"},
                                 "alt_text": {"type": "string"},
                             },
-                            "required": ["title", "description", "image_url"],
+                            "required": ["title", "description"],
+                            "oneOf": [
+                                {"required": ["image_url"]},
+                                {"required": ["image_path"]},
+                            ],
                         },
                     },
                 },
@@ -197,6 +215,8 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextCont
     try:
         if name == "create_pin":
             result = await client.create_pin(**arguments)
+        elif name == "dry_run_pin":
+            result = await client.create_pin(dry_run=True, **arguments)
         elif name == "update_pin":
             result = await client.update_pin(**arguments)
         elif name == "delete_pin":
@@ -223,6 +243,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextCont
             result = await client.bulk_create_pins(
                 board_id=arguments["board_id"],
                 pins=arguments["pins"],
+                dry_run=arguments.get("dry_run", False),
             )
         elif name == "get_trending":
             result = await client.get_trending(
