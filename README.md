@@ -93,8 +93,17 @@ Pinterest API v5 rate limits for organic posting:
 git clone https://github.com/clugtu/pinterest-mcp
 cd pinterest-mcp
 pip install -e ".[dev]"
+pre-commit install
 pytest
 ```
+
+This repo uses [pre-commit](https://pre-commit.com/) with [ruff](https://docs.astral.sh/ruff/) for linting and formatting. Install `pre-commit` if you don't have it:
+
+```bash
+pip install pre-commit
+```
+
+Then run `pre-commit install` once to register the hooks — they'll run automatically on every `git commit`.
 
 ---
 
