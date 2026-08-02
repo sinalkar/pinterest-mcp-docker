@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/sinalkar/pinterest-mcp-docker/actions/workflows/ci.yml/badge.svg)](https://github.com/sinalkar/pinterest-mcp-docker/actions/workflows/ci.yml)
 [![Security](https://github.com/sinalkar/pinterest-mcp-docker/actions/workflows/security.yml/badge.svg)](https://github.com/sinalkar/pinterest-mcp-docker/actions/workflows/security.yml)
-[![Docker Image](https://img.shields.io/docker/v/sinalkar/pinterest-mcp-docker?label=Docker%20Hub)](https://hub.docker.com/r/sinalkar/pinterest-mcp-docker)
+[![Docker Image](https://img.shields.io/docker/v/sanjaysinalkar/pinterest-mcp-docker?label=Docker%20Hub)](https://hub.docker.com/r/sanjaysinalkar/pinterest-mcp-docker)
 [![PyPI](https://img.shields.io/pypi/v/pinterest-mcp-docker)](https://pypi.org/project/pinterest-mcp-docker/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
