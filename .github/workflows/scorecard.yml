@@ -1,6 +1,6 @@
 name: OpenSSF Scorecard
 
-on:
+'on':
   schedule:
     - cron: '0 6 * * 1'
   push:
