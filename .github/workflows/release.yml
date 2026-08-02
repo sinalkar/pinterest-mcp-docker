@@ -4,13 +4,46 @@ name: Release
   push:
     tags:
       - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to release, e.g. v0.2.0 (needed because tags pushed with GITHUB_TOKEN do not auto-trigger this workflow)'
+        required: true
 
 permissions:
   contents: read
 
 jobs:
+  resolve-tag:
+    name: Resolve Release Tag
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      version: ${{ steps.resolve.outputs.version }}
+      major: ${{ steps.resolve.outputs.major }}
+      major_minor: ${{ steps.resolve.outputs.major_minor }}
+    steps:
+      - name: Resolve tag and version
+        id: resolve
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::tag must be in vX.Y.Z format (got '$TAG')" >&2
+            exit 1
+          fi
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "major=${VERSION%%.*}" >> "$GITHUB_OUTPUT"
+          echo "major_minor=${VERSION%.*}" >> "$GITHUB_OUTPUT"
+
   check-credentials:
     name: Check Required Release Credentials
+    needs: resolve-tag
     runs-on: ubuntu-latest
     environment: release
     steps:
@@ -31,7 +64,7 @@ jobs:
 
   publish-docker:
     name: Build & Publish Container Images
-    needs: check-credentials
+    needs: [resolve-tag, check-credentials]
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -43,6 +76,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          ref: ${{ needs.resolve-tag.outputs.tag }}
           fetch-depth: 0
 
       - name: Install Cosign
@@ -75,10 +109,10 @@ jobs:
             ghcr.io/${{ github.repository }}
             ${{ secrets.DOCKERHUB_USERNAME }}/pinterest-mcp-docker
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=raw,value=latest,enable=${{ !contains(github.ref, '-') }}
+            type=raw,value=${{ needs.resolve-tag.outputs.version }}
+            type=raw,value=${{ needs.resolve-tag.outputs.major_minor }}
+            type=raw,value=${{ needs.resolve-tag.outputs.major }}
+            type=raw,value=latest
 
       - name: Build and Push Multi-Arch Image
         id: build-push
@@ -114,7 +148,7 @@ jobs:
 
   publish-pypi:
     name: Publish Python Package to PyPI
-    needs: publish-docker
+    needs: [resolve-tag, publish-docker]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -125,6 +159,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          ref: ${{ needs.resolve-tag.outputs.tag }}
           fetch-depth: 0
 
       - name: Set up Python
@@ -145,7 +180,7 @@ jobs:
 
   github-release:
     name: Create GitHub Release
-    needs: [publish-docker, publish-pypi]
+    needs: [resolve-tag, publish-docker, publish-pypi]
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -155,10 +190,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          ref: ${{ needs.resolve-tag.outputs.tag }}
           fetch-depth: 0
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.resolve-tag.outputs.tag }}
           body_path: CHANGELOG.md
           generate_release_notes: true
