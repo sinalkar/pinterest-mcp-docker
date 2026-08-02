@@ -30,16 +30,16 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@c47758b77c9736f4b2ef4073d4d51994fabfe349 # v3.7.1
+        uses: docker/setup-buildx-action@v3
 
       - name: Log in to GitHub Container Registry
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -47,7 +47,7 @@ jobs:
 
       - name: Extract Docker metadata
         id: meta
-        uses: docker/metadata-action@369d80d8b02dfe3416921832ed5d8e68c0b9a9a3 # v5.5.1
+        uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
@@ -55,7 +55,7 @@ jobs:
             type=sha,format=short
 
       - name: Build image for testing
-        uses: docker/build-push-action@48aba3b46d1b1fec4fedd7c5d0c644b749a4ef4d # v6.10.0
+        uses: docker/build-push-action@v6
         with:
           context: .
           load: true
@@ -73,7 +73,7 @@ jobs:
           docker rm -f test-http
 
       - name: Trivy Image Scan (SARIF Report)
-        uses: aquasecurity/trivy-action@18f2510ee396bbf400402947b394d2dd8c87dbb0 # v0.29.0
+        uses: aquasecurity/trivy-action@master
         with:
           image-ref: 'pinterest-mcp-docker:test'
           format: 'sarif'
@@ -81,7 +81,7 @@ jobs:
           exit-code: '0'
 
       - name: Upload Trivy Image SARIF
-        uses: github/codeql-action/upload-sarif@dd7440b688e8d408d9d336bb6931380efb7bfb2f # v3.28.3
+        uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: 'trivy-image-results.sarif'
@@ -89,7 +89,7 @@ jobs:
 
       - name: Build and Push (on push main)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: docker/build-push-action@48aba3b46d1b1fec4fedd7c5d0c644b749a4ef4d # v6.10.0
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: true

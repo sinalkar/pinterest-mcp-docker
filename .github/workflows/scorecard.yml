@@ -26,18 +26,18 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Run Scorecard
-        uses: ossf/scorecard-action@f49a2e57d4e74909968467202b963e0e4cb0704d # v2.4.1
+        uses: ossf/scorecard-action@v2.4.0
         with:
           results_file: results.sarif
           results_format: sarif
           publish_results: true
 
       - name: Upload Scorecard SARIF
-        uses: github/codeql-action/upload-sarif@dd7440b688e8d408d9d336bb6931380efb7bfb2f # v3.28.3
+        uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: results.sarif
