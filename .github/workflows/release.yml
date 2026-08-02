@@ -1,6 +1,6 @@
 name: Release
 
-on:
+'on':
   push:
     tags:
       - 'v*.*.*'
@@ -38,7 +38,6 @@ jobs:
       contents: read
       packages: write
       id-token: write
-      attestations: write
 
     steps:
       - name: Checkout repository
@@ -94,9 +93,12 @@ jobs:
       - name: Sign Container Images with Cosign
         env:
           DIGEST: ${{ steps.build-push.outputs.digest }}
+          DH_USER: ${{ secrets.DOCKERHUB_USERNAME }}
         run: |
           cosign sign --yes "ghcr.io/${{ github.repository }}@${DIGEST}"
-          cosign sign --yes "${{ secrets.DOCKERHUB_USERNAME }}/pinterest-mcp-docker@${DIGEST}"
+          if [ -n "$DH_USER" ]; then
+            cosign sign --yes "${DH_USER}/pinterest-mcp-docker@${DIGEST}"
+          fi
 
   publish-pypi:
     name: Publish Python Package to PyPI
