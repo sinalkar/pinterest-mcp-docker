@@ -100,6 +100,18 @@ jobs:
             cosign sign --yes "${DH_USER}/pinterest-mcp-docker@${DIGEST}"
           fi
 
+      - name: Update Docker Hub Description
+        if: env.DOCKERHUB_USERNAME != ''
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ secrets.DOCKERHUB_USERNAME }}/pinterest-mcp-docker
+          short-description: "Hardened, containerized MCP server for Pinterest API v5 — pins, boards, analytics"
+          readme-filepath: ./README.md
+
   publish-pypi:
     name: Publish Python Package to PyPI
     needs: publish-docker
