@@ -150,7 +150,7 @@ jobs:
     name: Publish Python Package to PyPI
     needs: [resolve-tag, publish-docker]
     runs-on: ubuntu-latest
-    environment: pypi
+    environment: release
     permissions:
       contents: read
       id-token: write
