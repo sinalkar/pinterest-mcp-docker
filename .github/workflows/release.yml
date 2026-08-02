@@ -1,0 +1,140 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+
+jobs:
+  check-credentials:
+    name: Check Required Release Credentials
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - name: Verify Docker Hub Credentials
+        env:
+          DH_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+          DH_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          MISSING=""
+          if [ -z "$DH_USER" ]; then MISSING="$MISSING DOCKERHUB_USERNAME"; fi
+          if [ -z "$DH_TOKEN" ]; then MISSING="$MISSING DOCKERHUB_TOKEN"; fi
+          if [ -n "$MISSING" ]; then
+            echo "Error: Missing required release credentials:$MISSING" >&2
+            exit 1
+          fi
+
+  publish-docker:
+    name: Build & Publish Container Images
+    needs: check-credentials
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bec8224c52b44976230f8863 # v3.7.0
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@49ed152c5ee782ebd7990d08680e1589077c17d9 # v3.2.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@c47758b77c9736f4b2ef4073d4d51994fabfe349 # v3.7.1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@369d80d8b02dfe3416921832ed5d8e68c0b9a9a3 # v5.5.1
+        with:
+          images: |
+            ghcr.io/${{ github.repository }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/pinterest-mcp-docker
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest,enable=${{ !contains(github.ref, '-') }}
+
+      - name: Build and Push Multi-Arch Image
+        id: build-push
+        uses: docker/build-push-action@48aba3b46d1b1fec4fedd7c5d0c644b749a4ef4d # v6.10.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Sign Container Images with Cosign
+        env:
+          DIGEST: ${{ steps.build-push.outputs.digest }}
+        run: |
+          cosign sign --yes "ghcr.io/${{ github.repository }}@${DIGEST}"
+          cosign sign --yes "${{ secrets.DOCKERHUB_USERNAME }}/pinterest-mcp-docker@${DIGEST}"
+
+  publish-pypi:
+    name: Publish Python Package to PyPI
+    needs: publish-docker
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@0b7f8abb1508181956e8e162db84b466c27e18ce # v5.3.0
+        with:
+          python-version: "3.12"
+
+      - name: Build Package
+        run: |
+          pip install build twine
+          python -m build
+          twine check dist/*
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034eb7a43411308c3d1a6 # v1.12.3
+
+  github-release:
+    name: Create GitHub Release
+    needs: [publish-docker, publish-pypi]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Create Release
+        uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267dfe # v2.2.1
+        with:
+          body_path: CHANGELOG.md
+          generate_release_notes: true

@@ -7,20 +7,20 @@ Run once to get your access + refresh tokens:
 from __future__ import annotations
 
 import asyncio
-import json
 import os
-import time
 import secrets
+import time
 import webbrowser
-from pathlib import Path
 from urllib.parse import urlencode
 
 import httpx
 from aiohttp import web  # type: ignore[import]
 
+from .config import load_settings
+from .security import save_atomic_token_file
+
 PINTEREST_AUTH_URL = "https://www.pinterest.com/oauth/"
-PINTEREST_TOKEN_URL = "https://api.pinterest.com/v5/oauth/token"
-TOKEN_FILE = Path(".pinterest_token.json")
+PINTEREST_TOKEN_URL = "https://api.pinterest.com/v5/oauth/token"  # noqa: S105
 REDIRECT_URI = "http://localhost:8089/callback"
 SCOPES = "boards:read,boards:write,pins:read,pins:write,user_accounts:read"
 
@@ -49,9 +49,16 @@ async def _run_local_server() -> str:
 
 def run_auth_flow() -> None:
     """Entrypoint for `pinterest-mcp-auth` CLI command."""
-    client_id = os.environ.get("PINTEREST_CLIENT_ID") or input("Pinterest Client ID: ").strip()
+    settings = load_settings()
+    client_id = (
+        (settings.client_id.get_secret_value() if settings.client_id else None)
+        or os.environ.get("PINTEREST_CLIENT_ID")
+        or input("Pinterest Client ID: ").strip()
+    )
     client_secret = (
-        os.environ.get("PINTEREST_CLIENT_SECRET") or input("Pinterest Client Secret: ").strip()
+        (settings.client_secret.get_secret_value() if settings.client_secret else None)
+        or os.environ.get("PINTEREST_CLIENT_SECRET")
+        or input("Pinterest Client Secret: ").strip()
     )
 
     state = secrets.token_urlsafe(16)
@@ -68,7 +75,7 @@ def run_auth_flow() -> None:
 
     async def _exchange() -> None:
         code = await _run_local_server()
-        async with httpx.AsyncClient() as http:
+        async with httpx.AsyncClient(verify=True) as http:
             resp = await http.post(
                 PINTEREST_TOKEN_URL,
                 data={
@@ -80,13 +87,15 @@ def run_auth_flow() -> None:
             )
             resp.raise_for_status()
             token_data = resp.json()
-        TOKEN_FILE.write_text(
-            json.dumps({
+
+        save_atomic_token_file(
+            settings.token_path,
+            {
                 "access_token": token_data["access_token"],
                 "refresh_token": token_data.get("refresh_token"),
                 "expiry": time.time() + token_data.get("expires_in", 3600),
-            })
+            },
         )
-        print(f"✅ Token saved to {TOKEN_FILE}")
+        print(f"✅ Token saved to {settings.token_path}")
 
     asyncio.run(_exchange())

@@ -1,0 +1,3 @@
+# Semgrep ignore rules
+# Format: path/to/file # expires: YYYY-MM-DD - Justification
+.venv/ # expires: 2099-12-31 - Virtual environment directory

@@ -1,0 +1,2 @@
+# Trivy ignore rules
+# Format: CVE-XXXX-XXXX # expires: YYYY-MM-DD - Justification

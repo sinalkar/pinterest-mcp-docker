@@ -6,26 +6,47 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
+    name: Test & Lint Matrix
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       matrix:
-        python-version: ["3.11", "3.12"]
+        python-version: ["3.11", "3.12", "3.13"]
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@0b7f8abb1508181956e8e162db84b466c27e18ce # v5.3.0
         with:
           python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine
+          pip install -e ".[dev]"
 
-      - name: Lint (ruff)
-        run: ruff check src/ tests/
+      - name: Ruff Lint & Format Check
+        run: |
+          ruff check src/ tests/
+          ruff format --check src/ tests/
 
-      - name: Test (pytest)
-        run: pytest
+      - name: Pytest with Coverage
+        run: |
+          pytest --cov=pinterest_mcp --cov-report=xml
+
+      - name: Build Package Artifacts & Check Distribution
+        run: |
+          python -m build
+          twine check dist/*

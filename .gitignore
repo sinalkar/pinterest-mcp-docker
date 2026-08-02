@@ -1,11 +1,32 @@
+# Python & Build
 __pycache__/
 *.py[cod]
+*$py.class
 *.egg-info/
 dist/
 build/
 .venv/
 venv/
-.env
-.pinterest_token.json
 .pytest_cache/
 .ruff_cache/
+.coverage
+htmlcov/
+
+# Local configuration & credentials
+.env
+.env.*
+!.env.template
+.pinterest_token.json
+
+# OpenSpec workflow files
+openspec/
+.openspec/
+
+# AI Agent directories & workspace metadata
+.agent/
+.agents/
+.claude/
+.codex/
+.cursor/
+.devin/
+.gemini/

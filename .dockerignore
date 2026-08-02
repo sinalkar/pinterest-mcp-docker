@@ -1,0 +1,16 @@
+.env*
+.pinterest_token.json
+.git
+.gitignore
+.github
+tests
+.pytest_cache
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.coverage
+htmlcov
+.openspec
+openspec

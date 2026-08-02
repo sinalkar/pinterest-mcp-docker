@@ -12,6 +12,15 @@ import pytest
 from pinterest_mcp.client import PinterestClient
 
 
+@pytest.fixture(autouse=True)
+def mock_dns():
+    with patch("socket.getaddrinfo") as mock_gai:
+        mock_gai.side_effect = lambda host, port, *args, **kwargs: [
+            (2, 1, 6, "", ("93.184.216.34", port))
+        ]
+        yield mock_gai
+
+
 @pytest.fixture
 def client() -> PinterestClient:
     c = PinterestClient(access_token="fake-token")
@@ -39,7 +48,9 @@ async def test_create_pin(client: PinterestClient):
         "title": "Dragon Miniature",
         "link": "https://cults3d.com/en/3d-model/dragon",
     }
-    with patch.object(client._http, "request", new_callable=AsyncMock, return_value=_mock_resp(resp_data)):
+    with patch.object(
+        client._http, "request", new_callable=AsyncMock, return_value=_mock_resp(resp_data)
+    ):
         result = await client.create_pin(
             board_id="board_123",
             title="Dragon Miniature",
@@ -64,7 +75,9 @@ async def test_list_boards(client: PinterestClient):
             {"id": "b2", "name": "Warhammer", "pin_count": 18},
         ]
     }
-    with patch.object(client._http, "request", new_callable=AsyncMock, return_value=_mock_resp(resp_data)):
+    with patch.object(
+        client._http, "request", new_callable=AsyncMock, return_value=_mock_resp(resp_data)
+    ):
         boards = await client.list_boards()
     assert len(boards) == 2
     assert boards[0]["name"] == "DnD Miniatures"
@@ -83,7 +96,9 @@ async def test_search_pins(client: PinterestClient):
             {"id": "p2", "title": "FDM Dragon"},
         ]
     }
-    with patch.object(client._http, "request", new_callable=AsyncMock, return_value=_mock_resp(resp_data)):
+    with patch.object(
+        client._http, "request", new_callable=AsyncMock, return_value=_mock_resp(resp_data)
+    ):
         results = await client.search_pins("dragon miniature")
     assert len(results) == 2
     assert results[0]["title"] == "Resin Dragon Print"
@@ -102,7 +117,9 @@ async def test_get_pin_analytics(client: PinterestClient):
             "summary_metrics": {"IMPRESSION": 1250, "SAVE": 34, "OUTBOUND_CLICK": 8},
         }
     }
-    with patch.object(client._http, "request", new_callable=AsyncMock, return_value=_mock_resp(resp_data)):
+    with patch.object(
+        client._http, "request", new_callable=AsyncMock, return_value=_mock_resp(resp_data)
+    ):
         analytics = await client.get_pin_analytics(
             pin_id="pin_001", start_date="2026-02-01", end_date="2026-03-01"
         )
@@ -121,6 +138,8 @@ async def test_bulk_create_pins_calls_create_for_each(client: PinterestClient):
         for i in range(3)
     ]
     resp_data = {"id": "pin_x"}
-    with patch.object(client._http, "request", new_callable=AsyncMock, return_value=_mock_resp(resp_data)):
+    with patch.object(
+        client._http, "request", new_callable=AsyncMock, return_value=_mock_resp(resp_data)
+    ):
         results = await client.bulk_create_pins(board_id="b1", pins=pins)
     assert len(results) == 3

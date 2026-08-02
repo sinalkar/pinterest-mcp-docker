@@ -1,0 +1,49 @@
+"""CLI entry point for starting the MCP server in stdio or http mode (Tasks 5.4 & 5.5)."""
+
+from __future__ import annotations
+
+import os
+import sys
+
+from .config import Transport, load_settings_or_exit
+from .stdio_main import main as stdio_main
+
+
+def main() -> None:
+    raw_transport = os.environ.get("MCP_TRANSPORT", "stdio").lower()
+    if raw_transport not in (Transport.STDIO.value, Transport.HTTP.value):
+        print(
+            f"Error: Invalid MCP_TRANSPORT value {raw_transport!r}. "
+            f"Accepted values are: 'stdio', 'http'.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+    settings = load_settings_or_exit()
+
+    if settings.transport is Transport.STDIO:
+        stdio_main()
+    elif settings.transport is Transport.HTTP:
+        try:
+            import uvicorn
+        except ImportError:
+            print(
+                "Error: HTTP transport dependencies not installed. "
+                "Install with `pip install pinterest-mcp-docker[http]`.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        from .http_app import create_http_app
+
+        http_app = create_http_app(settings)
+        uvicorn.run(
+            http_app,
+            host=settings.host,
+            port=settings.port,
+            log_level=settings.log_level.lower(),
+        )
+
+
+if __name__ == "__main__":
+    main()

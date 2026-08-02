@@ -17,11 +17,19 @@ from typing import Any
 
 import httpx
 
+from . import USER_AGENT
+from .config import Settings, load_settings
+from .security import (
+    SecurityError,
+    resolve_local_image_path,
+    save_atomic_token_file,
+    validate_public_url,
+)
+
 logger = logging.getLogger(__name__)
 
 PINTEREST_BASE = "https://api.pinterest.com/v5"
 PINTEREST_AUTH = "https://api.pinterest.com/v5/oauth/token"
-TOKEN_FILE = Path(".pinterest_token.json")
 
 # Rate limit: 10 pins/minute
 _PIN_RATE_LIMIT = 10
@@ -37,39 +45,90 @@ class PinterestClient:
         client_secret: str | None = None,
         access_token: str | None = None,
         refresh_token: str | None = None,
+        settings: Settings | None = None,
     ) -> None:
-        self.client_id = client_id or os.environ.get("PINTEREST_CLIENT_ID", "")
-        self.client_secret = client_secret or os.environ.get("PINTEREST_CLIENT_SECRET", "")
-        self._access_token = access_token or os.environ.get("PINTEREST_ACCESS_TOKEN")
-        self._refresh_token = refresh_token or os.environ.get("PINTEREST_REFRESH_TOKEN")
+        self.settings = settings or load_settings()
+        self.client_id = (
+            client_id
+            or (self.settings.client_id.get_secret_value() if self.settings.client_id else "")
+            or os.environ.get("PINTEREST_CLIENT_ID", "")
+        )
+        self.client_secret = (
+            client_secret
+            or (
+                self.settings.client_secret.get_secret_value()
+                if self.settings.client_secret
+                else ""
+            )
+            or os.environ.get("PINTEREST_CLIENT_SECRET", "")
+        )
+        self._access_token = (
+            access_token
+            or (
+                self.settings.access_token.get_secret_value()
+                if self.settings.access_token
+                else None
+            )
+            or os.environ.get("PINTEREST_ACCESS_TOKEN")
+        )
+        self._refresh_token = (
+            refresh_token
+            or (
+                self.settings.refresh_token.get_secret_value()
+                if self.settings.refresh_token
+                else None
+            )
+            or os.environ.get("PINTEREST_REFRESH_TOKEN")
+        )
         self._token_expiry: float = 0
         self._pin_timestamps: list[float] = []
-        self._http = httpx.AsyncClient(
-            timeout=30.0,
-            base_url=PINTEREST_BASE,
-            headers={"User-Agent": "pinterest-mcp/0.1.0"},
+
+        timeout_cfg = httpx.Timeout(
+            connect=10.0,
+            read=self.settings.http_timeout,
+            write=30.0,
+            pool=10.0,
         )
+        self._http = httpx.AsyncClient(
+            timeout=timeout_cfg,
+            verify=True,
+            base_url=PINTEREST_BASE,
+            headers={"User-Agent": USER_AGENT},
+        )
+        # Verify TLS verification is enabled
+        assert getattr(self._http, "_verify", True) is not False, "TLS verification must be on"
+
+        # Check legacy token file
+        legacy_token = Path(".pinterest_token.json")
+        if legacy_token.exists() and not self.settings.token_path.exists():
+            logger.warning(
+                "Legacy token file %s exists, but new token path %s does not.",
+                legacy_token,
+                self.settings.token_path,
+            )
+
         # Try loading stored token
-        if not self._access_token and TOKEN_FILE.exists():
+        if not self._access_token and self.settings.token_path.exists():
             self._load_token_file()
 
     def _load_token_file(self) -> None:
         try:
-            data = json.loads(TOKEN_FILE.read_text())
+            data = json.loads(self.settings.token_path.read_text(encoding="utf-8"))
             self._access_token = data.get("access_token")
             self._refresh_token = data.get("refresh_token")
             self._token_expiry = data.get("expiry", 0)
-            logger.info("Loaded Pinterest token from %s", TOKEN_FILE)
+            logger.info("Loaded Pinterest token from %s", self.settings.token_path)
         except Exception as e:
             logger.warning("Could not load token file: %s", e)
 
     def _save_token_file(self) -> None:
-        TOKEN_FILE.write_text(
-            json.dumps({
+        save_atomic_token_file(
+            self.settings.token_path,
+            {
                 "access_token": self._access_token,
                 "refresh_token": self._refresh_token,
                 "expiry": self._token_expiry,
-            })
+            },
         )
 
     async def _ensure_token(self) -> str:
@@ -78,9 +137,7 @@ class PinterestClient:
         if self._refresh_token:
             await self._refresh()
             return self._access_token  # type: ignore[return-value]
-        raise RuntimeError(
-            "No Pinterest access token. Run `pinterest-mcp-auth` to authenticate."
-        )
+        raise RuntimeError("No Pinterest access token. Run `pinterest-mcp-auth` to authenticate.")
 
     async def _refresh(self) -> None:
         resp = await self._http.post(
@@ -144,32 +201,29 @@ class PinterestClient:
         alt_text: str | None = None,
         dry_run: bool = False,
     ) -> dict[str, Any]:
-        """Create a Pinterest pin.
-
-        Either ``image_url`` (remote) or ``image_path`` (local file) must be
-        supplied — a pin cannot be created without an image. ``image_path``
-        takes precedence if both are given (file is base64-encoded and sent
-        directly, avoiding the need for a public CDN URL).
-
-        Pinterest has no sandbox environment. Use ``dry_run=True`` during
-        development to validate inputs without making a real API call — the
-        app runs in dev mode so only your own account can see posts anyway,
-        but dry_run gives a zero-side-effect test path.
-        """
+        """Create a Pinterest pin."""
         if not image_url and not image_path:
             raise ValueError("Either image_url or image_path must be provided")
 
         if image_path:
-            img_bytes = Path(image_path).read_bytes()
+            if not self.settings.local_paths_enabled:
+                raise SecurityError("Local image paths are disabled in HTTP transport mode.")
+            resolved_path, content_type = resolve_local_image_path(
+                image_path,
+                allowed_dir=self.settings.allowed_image_dir,
+                max_bytes=self.settings.max_image_bytes,
+            )
+            img_bytes = resolved_path.read_bytes()
             img_b64 = base64.b64encode(img_bytes).decode()
-            content_type = "image/png" if image_path.lower().endswith(".png") else "image/jpeg"
             media_source: dict[str, Any] = {
                 "source_type": "image_base64",
                 "content_type": content_type,
                 "data": img_b64,
             }
         else:
-            media_source = {"source_type": "image_url", "url": image_url}
+            assert image_url is not None
+            validated_url, _ = validate_public_url(image_url)
+            media_source = {"source_type": "image_url", "url": validated_url}
 
         payload: dict[str, Any] = {
             "board_id": board_id,
@@ -239,10 +293,7 @@ class PinterestClient:
         pins: list[dict[str, Any]],
         dry_run: bool = False,
     ) -> list[dict[str, Any]]:
-        """Create multiple pins, respecting the 10/min rate limit.
-
-        Each pin dict must include either ``image_url`` or ``image_path``.
-        """
+        """Create multiple pins, respecting the 10/min rate limit."""
         results = []
         for pin in pins:
             result = await self.create_pin(
@@ -278,9 +329,7 @@ class PinterestClient:
             json={"name": name, "description": description, "privacy": privacy},
         )
 
-    async def get_board_pins(
-        self, board_id: str, page_size: int = 25
-    ) -> list[dict[str, Any]]:
+    async def get_board_pins(self, board_id: str, page_size: int = 25) -> list[dict[str, Any]]:
         data = await self._request(
             "GET", f"/boards/{board_id}/pins", params={"page_size": page_size}
         )
@@ -290,9 +339,7 @@ class PinterestClient:
     # Search
     # ------------------------------------------------------------------
 
-    async def search_pins(
-        self, query: str, page_size: int = 25
-    ) -> list[dict[str, Any]]:
+    async def search_pins(self, query: str, page_size: int = 25) -> list[dict[str, Any]]:
         data = await self._request(
             "GET",
             "/search/pins",
