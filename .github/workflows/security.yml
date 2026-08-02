@@ -43,6 +43,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@0b7f8abb1508181956e8e162db84b466c27e18ce # v5.3.0
@@ -50,7 +52,9 @@ jobs:
           python-version: "3.12"
 
       - name: Install Scanners
-        run: pip install bandit pip-audit
+        run: |
+          python -m pip install --upgrade pip
+          pip install bandit pip-audit
 
       - name: Run Bandit
         run: bandit -r src/ -f json -o bandit-results.json || true

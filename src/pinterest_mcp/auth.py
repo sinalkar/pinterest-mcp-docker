@@ -20,7 +20,7 @@ from .config import load_settings
 from .security import save_atomic_token_file
 
 PINTEREST_AUTH_URL = "https://www.pinterest.com/oauth/"
-PINTEREST_TOKEN_URL = "https://api.pinterest.com/v5/oauth/token"  # noqa: S105
+PINTEREST_TOKEN_URL = "https://api.pinterest.com/v5/oauth/token"  # nosec B105 # noqa: S105
 REDIRECT_URI = "http://localhost:8089/callback"
 SCOPES = "boards:read,boards:write,pins:read,pins:write,user_accounts:read"
 

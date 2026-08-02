@@ -1,13 +1,14 @@
 # Stage 1: Build wheel
-FROM python:3.12-slim@sha256:d8d17208ff94451000572b9a78f244199c0175b9f7a5528ee1a221f7c32bf28b AS builder
+FROM python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de AS builder
 WORKDIR /build
+ENV SETUPTOOLS_SCM_PRETEND_VERSION=0.1.0
 RUN pip install --no-cache-dir hatchling hatch-vcs
 COPY pyproject.toml README.md NOTICE.md LICENSE CHANGELOG.md ./
 COPY src/ ./src/
 RUN python -m hatchling build -t wheel
 
 # Stage 2: Install dependencies into venv with require-hashes
-FROM python:3.12-slim@sha256:d8d17208ff94451000572b9a78f244199c0175b9f7a5528ee1a221f7c32bf28b AS venv
+FROM python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de AS venv
 WORKDIR /app
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
@@ -17,7 +18,7 @@ COPY --from=builder /build/dist/*.whl ./
 RUN pip install --no-cache-dir --no-deps *.whl
 
 # Stage 3: Runtime image
-FROM python:3.12-slim@sha256:d8d17208ff94451000572b9a78f244199c0175b9f7a5528ee1a221f7c32bf28b AS runtime
+FROM python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de AS runtime
 
 LABEL org.opencontainers.image.title="pinterest-mcp-docker" \
       org.opencontainers.image.description="Hardened, containerized MCP server for Pinterest API v5" \

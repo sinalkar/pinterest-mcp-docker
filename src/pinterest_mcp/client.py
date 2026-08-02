@@ -96,7 +96,8 @@ class PinterestClient:
             headers={"User-Agent": USER_AGENT},
         )
         # Verify TLS verification is enabled
-        assert getattr(self._http, "_verify", True) is not False, "TLS verification must be on"
+        if getattr(self._http, "_verify", True) is False:
+            raise RuntimeError("TLS verification must be on")
 
         # Check legacy token file
         legacy_token = Path(".pinterest_token.json")
@@ -221,7 +222,8 @@ class PinterestClient:
                 "data": img_b64,
             }
         else:
-            assert image_url is not None
+            if image_url is None:
+                raise ValueError("Either image_url or image_path must be provided")
             validated_url, _ = validate_public_url(image_url)
             media_source = {"source_type": "image_url", "url": validated_url}
 
