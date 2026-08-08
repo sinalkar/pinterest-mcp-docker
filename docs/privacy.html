@@ -3,55 +3,147 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Privacy Policy — Pinterest MCP</title>
+  <title>Privacy Policy — Pinterest MCP Docker</title>
   <style>
     body { font-family: system-ui, sans-serif; max-width: 700px; margin: 60px auto; padding: 0 20px; color: #222; line-height: 1.7; }
     h1 { font-size: 1.8rem; }
     h2 { font-size: 1.2rem; margin-top: 2rem; }
+    h3 { font-size: 1.05rem; margin-top: 1.5rem; }
     p, li { font-size: 1rem; }
     a { color: #e60023; }
+    code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-size: 0.9rem; }
     footer { margin-top: 3rem; font-size: 0.85rem; color: #666; }
   </style>
 </head>
 <body>
 
   <h1>Privacy Policy</h1>
-  <p><strong>Last updated: March 8, 2026</strong></p>
+  <p><strong>Last updated: August 8, 2026</strong></p>
 
-  <p>This Privacy Policy describes how the <strong>Pinterest MCP</strong> application ("the App") handles information when you authorise it to access your Pinterest account.</p>
+  <p>This Privacy Policy describes how <strong>pinterest-mcp-docker</strong> ("the App", "we", "us") handles information when you authorise it to access your Pinterest account. By using the App, you agree to the practices described in this policy.</p>
 
   <h2>1. What This App Is</h2>
-  <p>Pinterest MCP is a personal developer tool built to automate pin creation and board management on a single Pinterest account owned and operated by the developer. It is not a public service and is not available to third parties.</p>
+  <p><strong>pinterest-mcp-docker</strong> is an open-source Model Context Protocol (MCP) server that connects AI assistants (such as Claude Desktop, Cursor, and custom LLM agents) to the <a href="https://developers.pinterest.com/docs/api/v5/" target="_blank" rel="noopener">Pinterest API v5</a>. The App is distributed publicly via <a href="https://github.com/sinalkar/pinterest-mcp-docker" target="_blank" rel="noopener">GitHub</a>, <a href="https://pypi.org/project/pinterest-mcp-docker/" target="_blank" rel="noopener">PyPI</a>, and Docker container registries. It is an unofficial project and is not affiliated with, endorsed by, or sponsored by Pinterest, Inc.</p>
+  <p>The App is designed to be self-hosted by each user on their own machine or container. Each instance operates on a single Pinterest account belonging to the person who configures and runs it.</p>
 
   <h2>2. Data We Access</h2>
-  <p>When authorised via Pinterest OAuth 2.0, the App may access:</p>
+  <p>When you authorise the App via Pinterest OAuth 2.0, the App requests the following scopes:</p>
   <ul>
-    <li>Your Pinterest boards (read and write)</li>
-    <li>Your pins (read and write)</li>
-    <li>Basic account information (username, profile)</li>
-    <li>Pin and board analytics (read only)</li>
+    <li><code>boards:read</code> — Read your Pinterest boards</li>
+    <li><code>boards:write</code> — Create and manage your boards</li>
+    <li><code>pins:read</code> — Read your pins</li>
+    <li><code>pins:write</code> — Create, update, and delete your pins</li>
+    <li><code>user_accounts:read</code> — Read your basic account information</li>
+  </ul>
+  <p>The App provides the following capabilities through the Pinterest API:</p>
+  <ul>
+    <li>Create, update, and delete pins on your boards</li>
+    <li>Create, list, and delete boards</li>
+    <li>List pins on a specific board</li>
+    <li>Search public Pinterest pins by keyword</li>
+    <li>Retrieve pin-level and account-level analytics (impressions, saves, clicks, engagement)</li>
+    <li>Retrieve trending topics and keywords</li>
   </ul>
 
   <h2>3. How We Use Your Data</h2>
-  <p>All data accessed is used solely to:</p>
+  <p>All data accessed through the Pinterest API is used solely to:</p>
   <ul>
-    <li>Create new pins on your boards on your behalf</li>
-    <li>Read existing boards and pins to avoid duplicates</li>
-    <li>Retrieve analytics to assess post performance</li>
+    <li>Perform the actions you (or your AI assistant) explicitly request, such as creating a pin or listing boards</li>
+    <li>Retrieve analytics for your own account's performance tracking</li>
+    <li>Search and discover public Pinterest content</li>
   </ul>
-  <p>No data is shared with third parties, sold, or used for advertising.</p>
+  <p><strong>We do not:</strong></p>
+  <ul>
+    <li>Sell, rent, or share your data with any third party</li>
+    <li>Use your data for advertising purposes</li>
+    <li>Use your data to target people with advertising outside of Pinterest</li>
+    <li>Join or combine Pinterest Data with personal information from other sources</li>
+    <li>Derive or attempt to derive non-public information about individual Pinterest users, including their location</li>
+    <li>Use automated scraping or data extraction methods outside the official Pinterest API</li>
+    <li>Share or sell information from the Pinterest API with another advertising service</li>
+  </ul>
 
-  <h2>4. Data Storage</h2>
-  <p>OAuth tokens (access token and refresh token) are stored locally on the developer's own machine in a file named <code>.pinterest_token.json</code>. This file is never uploaded to any remote server or third-party service.</p>
+  <h2>4. Data Storage and Retention</h2>
 
-  <h2>5. Data Retention</h2>
-  <p>Tokens are retained only as long as needed for the automation tasks. They can be revoked at any time via your <a href="https://www.pinterest.com/settings/security" target="_blank" rel="noopener">Pinterest account security settings</a>.</p>
+  <h3>4.1 OAuth Tokens</h3>
+  <p>The App stores your Pinterest OAuth 2.0 credentials (access token and refresh token) locally on the machine or container where the App is running. Tokens are saved to:</p>
+  <ul>
+    <li><code>$XDG_STATE_HOME/pinterest-mcp/token.json</code> (if <code>XDG_STATE_HOME</code> is set), or</li>
+    <li><code>~/.local/state/pinterest-mcp/token.json</code> (default fallback)</li>
+  </ul>
+  <p>The token file is written with restrictive <code>0600</code> file permissions and the parent directory with <code>0700</code> permissions to prevent unauthorised access. Token files are never uploaded to any remote server or third-party service.</p>
 
-  <h2>6. Third-Party Services</h2>
-  <p>The App communicates exclusively with the official <a href="https://developers.pinterest.com/docs/api/v5/" target="_blank" rel="noopener">Pinterest API v5</a>. No other third-party services receive your data.</p>
+  <h3>4.2 No API Response Data Stored</h3>
+  <p>In accordance with the Pinterest Developer and API Terms of Service, the App does <strong>not</strong> store, cache, or persist any information accessed through the Pinterest API. Each time data is needed (e.g., listing boards, retrieving analytics), the App makes a fresh API call. The only data persisted on disk is the OAuth token file described above.</p>
 
-  <h2>7. Contact</h2>
-  <p>If you have any questions about this policy, please open an issue on the <a href="https://github.com/clugtu/pinterest-mcp" target="_blank" rel="noopener">GitHub repository</a>.</p>
+  <h3>4.3 Logs</h3>
+  <p>The App produces local log output for operational and debugging purposes. The App automatically redacts known secrets (OAuth access tokens, client secrets, and base64-encoded payloads) from log entries. Logs are stored locally and are not transmitted to any remote logging service.</p>
+
+  <h3>4.4 Data Retention</h3>
+  <p>OAuth tokens are retained on your local machine only for as long as needed to operate the App. You may revoke the App's access at any time via your <a href="https://www.pinterest.com/settings/security" target="_blank" rel="noopener">Pinterest account security settings</a>. To remove stored tokens from your machine, delete the token file at the path listed in Section 4.1.</p>
+
+  <h2>5. Third-Party Services</h2>
+  <p>The App communicates exclusively with the official <a href="https://developers.pinterest.com/docs/api/v5/" target="_blank" rel="noopener">Pinterest API v5</a> over HTTPS. No other third-party services, APIs, analytics platforms, or advertising networks receive your data. The App enforces TLS certificate verification on all outbound connections.</p>
+
+  <h2>6. Data Security</h2>
+  <p>The App implements the following security measures to protect your credentials and data:</p>
+  <ul>
+    <li><strong>Token file permissions:</strong> OAuth tokens are stored with <code>0600</code> file permissions and <code>0700</code> directory permissions.</li>
+    <li><strong>Atomic writes:</strong> Token files are written atomically via temporary files and <code>os.replace()</code> to prevent partial writes or corruption.</li>
+    <li><strong>TLS enforcement:</strong> All HTTPS connections to the Pinterest API require valid certificate verification. The App refuses to start if TLS verification is disabled.</li>
+    <li><strong>Secret redaction:</strong> Access tokens, client secrets, and base64 payloads are automatically scrubbed from log output and error messages.</li>
+    <li><strong>SSRF protection:</strong> Outbound image URL requests are validated against public IP ranges to prevent Server-Side Request Forgery attacks.</li>
+    <li><strong>Path traversal guards:</strong> Local image file access is restricted to a configured allowed directory with canonical path verification.</li>
+    <li><strong>Bearer token auth:</strong> When running in HTTP server mode on a non-loopback address, the App requires a bearer authentication token for all requests.</li>
+    <li><strong>Container hardening:</strong> The Docker image runs as an unprivileged user (UID 10001) with a read-only root filesystem and all Linux capabilities dropped.</li>
+  </ul>
+
+  <h2>7. Your Privacy Rights</h2>
+
+  <h3>7.1 California Consumer Privacy Act (CCPA)</h3>
+  <p>If you are a California resident, the following applies in accordance with the CCPA and the Pinterest Developer and API Terms of Service:</p>
+  <ul>
+    <li><strong>No sale of personal information:</strong> We do not sell your personal information, as "sell" is defined under the CCPA. Pinterest does not receive any monetary or other consideration from us for your personal information.</li>
+    <li><strong>Purpose limitation:</strong> We do not retain, use, or disclose your personal information for any purpose other than for the specific purpose of providing the App's functionality as described in this policy.</li>
+    <li><strong>No disclosure outside business relationship:</strong> We do not retain, use, or disclose your personal information outside the direct business relationship between you and the App.</li>
+    <li><strong>Right to know and delete:</strong> You have the right to request disclosure of the personal information we collect and to request deletion of that information. Since the App stores only OAuth tokens locally on your machine, you can exercise this right by deleting the token file described in Section 4.1 and revoking access in your Pinterest settings.</li>
+    <li><strong>Right to opt out:</strong> Since we do not sell personal information, there is no sale to opt out of. You may revoke the App's access to your Pinterest account at any time.</li>
+    <li><strong>Non-discrimination:</strong> We will not discriminate against you for exercising any of your CCPA rights.</li>
+  </ul>
+
+  <h3>7.2 General Data Protection Regulation (GDPR) — EEA Users</h3>
+  <p>If you are located in the European Economic Area (EEA), the following applies:</p>
+  <ul>
+    <li><strong>Lawful basis:</strong> The App processes your data based on your explicit consent, which you grant by completing the Pinterest OAuth 2.0 authorisation flow.</li>
+    <li><strong>Right to access:</strong> You may request information about the personal data we process about you. Since only OAuth tokens are stored locally, you can inspect the token file directly.</li>
+    <li><strong>Right to erasure:</strong> You may request deletion of your data by deleting the local token file and revoking the App's access in your Pinterest settings.</li>
+    <li><strong>Right to withdraw consent:</strong> You may withdraw your consent at any time by revoking the App's access via your <a href="https://www.pinterest.com/settings/security" target="_blank" rel="noopener">Pinterest account security settings</a> and deleting the local token file.</li>
+    <li><strong>Right to data portability:</strong> The OAuth token file is stored in JSON format and can be copied or transferred by you at any time.</li>
+    <li><strong>Data minimisation:</strong> The App only requests the OAuth scopes necessary for its functionality and does not access data beyond what is needed for the requested actions.</li>
+    <li><strong>No cross-border transfers:</strong> The App runs locally on your machine or container. No data is transferred to servers controlled by the App developer. Data is only transmitted to Pinterest's API servers as governed by Pinterest's own privacy policy.</li>
+  </ul>
+
+  <h3>7.3 Children's Privacy</h3>
+  <p>The App is not intended for use by children under the age of 13. We do not knowingly collect personal information from children under 13. If you believe a child under 13 has provided personal information to the App, please contact us so we can take appropriate action.</p>
+
+  <h2>8. Data Breach Notification</h2>
+  <p>In the event of a data breach that compromises Pinterest Data or your OAuth credentials, the App's maintainer will:</p>
+  <ul>
+    <li>Promptly investigate the incident and take reasonable actions to mitigate harm</li>
+    <li>Notify affected users and Pinterest as soon as reasonably practicable</li>
+    <li>If located in the EEA, notify within two (2) business days of becoming aware of the breach</li>
+    <li>Cooperate with Pinterest to provide any additional information reasonably requested</li>
+  </ul>
+
+  <h2>9. Changes to This Privacy Policy</h2>
+  <p>We may update this Privacy Policy from time to time. The most current version will always be available at the <a href="https://github.com/sinalkar/pinterest-mcp-docker/blob/main/docs/privacy.html" target="_blank" rel="noopener">GitHub repository</a>. The "Last updated" date at the top of this page indicates when the policy was last revised. We encourage you to review this page periodically.</p>
+
+  <h2>10. Contact</h2>
+  <p>If you have any questions about this Privacy Policy or wish to exercise your privacy rights, please:</p>
+  <ul>
+    <li>Open an issue on the <a href="https://github.com/sinalkar/pinterest-mcp-docker/issues" target="_blank" rel="noopener">GitHub repository</a>, or</li>
+    <li>Contact the maintainer via the repository's listed contact methods</li>
+  </ul>
 
   <footer>
     <p><a href="index.html">← Back</a></p>
