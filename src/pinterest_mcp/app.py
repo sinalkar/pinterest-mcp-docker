@@ -2,22 +2,37 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import logging
-from typing import Any
+from typing import Annotated, Any
 
 from mcp import types
-from mcp.server import Server
+from mcp.server.lowlevel.server import Server
+from mcp.server.mcpserver import MCPServer
 from pydantic import ValidationError
 
+from . import __version__
 from .client import PinterestClient
 from .security import SecurityError, sanitize_error
-from .tools import REGISTRY
+from .tools import REGISTRY, ToolSpec
 
 logger = logging.getLogger(__name__)
 
-mcp_app = Server("pinterest-mcp")
+mcp_app = MCPServer(name="pinterest-mcp", version=__version__)
 _client: PinterestClient | None = None
+
+
+def get_lowlevel_server() -> Server:
+    """The single accessor for the SDK's low-level `Server`.
+
+    `MCPServer` composes but does not fully expose the low-level server, and
+    the streamable-HTTP session manager and SSE transport both need it
+    directly. Every other module reaches it through this function rather than
+    touching the private attribute itself, so an SDK upgrade that removes or
+    renames the attribute fails here instead of at an arbitrary call site.
+    """
+    return mcp_app._lowlevel_server
 
 
 def get_client() -> PinterestClient:
@@ -32,16 +47,58 @@ def set_client(client: PinterestClient | None) -> None:
     _client = client
 
 
-async def list_tools() -> list[types.Tool]:
-    """Expose tools derived directly from the ToolSpec registry."""
-    return [
-        types.Tool(
-            name=spec.name,
-            description=spec.description,
-            inputSchema=spec.input_schema,
+def _placeholder_tool_fn(spec: ToolSpec) -> Any:
+    """Build a flattened-signature callable so `MCPServer.add_tool` can derive
+    a real advertised schema from the tool's Pydantic model.
+
+    The model (not this function) is the source of truth: schema, defaults,
+    lengths, and descriptions all come from `spec.model.model_fields` via
+    `Annotated[type, FieldInfo]`, so the two can never drift apart. The
+    function body is never on the call path — `call_tool` below is what
+    actually executes a tool call on every transport — but it has to be
+    real and correctly annotated because the SDK derives the schema from it.
+    """
+
+    async def _run(**kwargs: Any) -> Any:  # pragma: no cover - not on the call path
+        content = await call_tool(spec.name, kwargs)
+        return json.loads(content[0].text)
+
+    parameters = [
+        inspect.Parameter(
+            field_name,
+            inspect.Parameter.KEYWORD_ONLY,
+            default=inspect.Parameter.empty if field.is_required() else field.default,
+            annotation=Annotated[field.annotation, field],
         )
-        for spec in REGISTRY.values()
+        for field_name, field in spec.model.model_fields.items()
     ]
+    _run.__signature__ = inspect.Signature(parameters)  # type: ignore[attr-defined]
+    _run.__name__ = spec.name
+    return _run
+
+
+for _spec in REGISTRY.values():
+    mcp_app.add_tool(
+        _placeholder_tool_fn(_spec),
+        name=_spec.name,
+        description=_spec.description,
+        structured_output=False,
+    )
+del _spec
+
+
+async def list_tools() -> list[types.Tool]:
+    """Expose tools as advertised by the `MCPServer` tool manager.
+
+    The schema for each tool is derived from its Pydantic model rather than
+    hand-written, so it carries real field constraints (lengths, enums) that
+    the previous hand-written schemas omitted. One consequence: a cross-field
+    constraint such as "exactly one of image_url or image_path" cannot be
+    expressed in a per-field JSON Schema and no longer appears in the
+    advertised schema, though it is still enforced at call time by the
+    model's validator (see `CreatePinInput._check_image_source`).
+    """
+    return await mcp_app.list_tools()
 
 
 async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextContent]:
@@ -70,15 +127,27 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextCont
     return [types.TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
 
 
-async def _handle_list_tools(req: types.ListToolsRequest) -> types.ListToolsResult:
-    tools_list = await list_tools()
-    return types.ListToolsResult(tools=tools_list)
+async def _handle_call_tool(ctx: Any, params: types.CallToolRequestParams) -> types.CallToolResult:
+    """Override the SDK's default `tools/call` dispatch.
 
+    `MCPServer`'s own dispatch runs each registered tool's flattened wrapper
+    function through per-field argument validation and, on any failure,
+    raises `ToolError` — which the SDK turns into `CallToolResult(isError=True,
+    content=[...])` carrying the raw exception message. That both changes the
+    wire shape (`isError` was never set before this migration) and risks an
+    unsanitized message reaching the client. Overriding this handler keeps
+    `call_tool()`'s validate -> dispatch -> `sanitize_error` path — including
+    its non-`isError` JSON-body-on-failure shape — as the only way a tool call
+    is ever executed, on every transport, unchanged by this migration.
 
-async def _handle_call_tool(req: types.CallToolRequest) -> types.CallToolResult:
-    content = await call_tool(req.params.name, req.params.arguments or {})
+    `tools/list` is intentionally left on the SDK's default handler: it is
+    backed by the same `_tool_manager` populated via `add_tool` below, so it
+    already reflects the schema `list_tools()` derives, with no dispatch risk.
+    """
+    content = await call_tool(params.name, params.arguments or {})
     return types.CallToolResult(content=content)
 
 
-mcp_app.add_request_handler("tools/list", types.ListToolsRequest, _handle_list_tools)
-mcp_app.add_request_handler("tools/call", types.CallToolRequest, _handle_call_tool)
+get_lowlevel_server().add_request_handler(
+    "tools/call", types.CallToolRequestParams, _handle_call_tool
+)

@@ -19,7 +19,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Mount, Route
 
 from . import __version__
-from .app import mcp_app
+from .app import get_lowlevel_server
 from .config import Settings, load_settings
 
 logger = logging.getLogger(__name__)
@@ -53,7 +53,7 @@ def create_http_app(settings: Settings | None = None) -> Starlette:
     if settings is None:
         settings = load_settings()
 
-    session_manager = StreamableHTTPSessionManager(mcp_app)
+    session_manager = StreamableHTTPSessionManager(get_lowlevel_server())
 
     @asynccontextmanager
     async def lifespan(app_instance: Starlette):

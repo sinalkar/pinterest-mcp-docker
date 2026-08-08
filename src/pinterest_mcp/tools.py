@@ -142,9 +142,15 @@ class GetTrendingInput(BaseToolInput):
 
 @dataclass(frozen=True)
 class ToolSpec:
+    """A tool's dispatch contract.
+
+    The advertised JSON Schema is no longer hand-written here: it is derived
+    from ``model`` (see ``app.py``), so the schema and the validator can never
+    drift apart. ``model`` remains the single source of truth for both.
+    """
+
     name: str
     description: str
-    input_schema: dict[str, Any]
     model: type[BaseToolInput]
     handler: Callable[[PinterestClient, Any], Awaitable[Any]]
 
@@ -157,68 +163,24 @@ REGISTRY: dict[str, ToolSpec] = {
             "image_url (remote URL) or image_path (local file path). Exactly one must "
             "be supplied. Use dry_run=true to validate without posting."
         ),
-        input_schema={
-            "type": "object",
-            "properties": {
-                "board_id": {"type": "string", "description": "Target board ID"},
-                "title": {"type": "string", "description": "Pin title"},
-                "description": {"type": "string", "description": "Pin description"},
-                "image_url": {"type": "string", "description": "Publicly accessible image URL"},
-                "image_path": {"type": "string", "description": "Local path to image"},
-                "link": {"type": "string", "description": "Destination URL"},
-                "alt_text": {"type": "string", "description": "Alt text"},
-                "dry_run": {"type": "boolean", "default": False},
-            },
-            "required": ["board_id", "title"],
-            "anyOf": [
-                {"required": ["image_url"]},
-                {"required": ["image_path"]},
-            ],
-        },
         model=CreatePinInput,
         handler=lambda client, args: client.create_pin(**args.model_dump()),
     ),
     "update_pin": ToolSpec(
         name="update_pin",
         description="Update metadata on an existing pin.",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "pin_id": {"type": "string"},
-                "title": {"type": "string"},
-                "description": {"type": "string"},
-                "link": {"type": "string"},
-                "board_id": {"type": "string"},
-            },
-            "required": ["pin_id"],
-        },
         model=UpdatePinInput,
         handler=lambda client, args: client.update_pin(**args.model_dump(exclude_unset=True)),
     ),
     "delete_pin": ToolSpec(
         name="delete_pin",
         description="Delete a pin.",
-        input_schema={
-            "type": "object",
-            "properties": {"pin_id": {"type": "string"}},
-            "required": ["pin_id"],
-        },
         model=DeletePinInput,
         handler=lambda client, args: client.delete_pin(args.pin_id),
     ),
     "get_pin_analytics": ToolSpec(
         name="get_pin_analytics",
         description="Get analytics for a pin: impressions, saves, link clicks, engagement.",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "pin_id": {"type": "string"},
-                "start_date": {"type": "string", "description": "YYYY-MM-DD"},
-                "end_date": {"type": "string", "description": "YYYY-MM-DD"},
-                "metrics": {"type": "array", "items": {"type": "string"}},
-            },
-            "required": ["pin_id", "start_date", "end_date"],
-        },
         model=GetPinAnalyticsInput,
         handler=lambda client, args: client.get_pin_analytics(
             pin_id=args.pin_id,
@@ -230,31 +192,12 @@ REGISTRY: dict[str, ToolSpec] = {
     "list_boards": ToolSpec(
         name="list_boards",
         description="List your Pinterest boards.",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "privacy": {
-                    "type": "string",
-                    "enum": ["ALL", "PUBLIC", "SECRET"],
-                    "default": "ALL",
-                }
-            },
-        },
         model=ListBoardsInput,
         handler=lambda client, args: client.list_boards(privacy=args.privacy),
     ),
     "create_board": ToolSpec(
         name="create_board",
         description="Create a new Pinterest board.",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "name": {"type": "string"},
-                "description": {"type": "string"},
-                "privacy": {"type": "string", "enum": ["PUBLIC", "SECRET"], "default": "PUBLIC"},
-            },
-            "required": ["name"],
-        },
         model=CreateBoardInput,
         handler=lambda client, args: client.create_board(
             name=args.name,
@@ -265,14 +208,6 @@ REGISTRY: dict[str, ToolSpec] = {
     "get_board_pins": ToolSpec(
         name="get_board_pins",
         description="List all pins on a specific board.",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "board_id": {"type": "string"},
-                "page_size": {"type": "integer", "default": 25},
-            },
-            "required": ["board_id"],
-        },
         model=GetBoardPinsInput,
         handler=lambda client, args: client.get_board_pins(
             board_id=args.board_id,
@@ -282,14 +217,6 @@ REGISTRY: dict[str, ToolSpec] = {
     "search_pins": ToolSpec(
         name="search_pins",
         description="Search public Pinterest pins by keyword. Useful for trend research.",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "query": {"type": "string"},
-                "page_size": {"type": "integer", "default": 25},
-            },
-            "required": ["query"],
-        },
         model=SearchPinsInput,
         handler=lambda client, args: client.search_pins(
             query=args.query,
@@ -299,15 +226,6 @@ REGISTRY: dict[str, ToolSpec] = {
     "get_account_analytics": ToolSpec(
         name="get_account_analytics",
         description="Get account-level Pinterest analytics: impressions, saves, clicks.",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "start_date": {"type": "string", "description": "YYYY-MM-DD"},
-                "end_date": {"type": "string", "description": "YYYY-MM-DD"},
-                "metrics": {"type": "array", "items": {"type": "string"}},
-            },
-            "required": ["start_date", "end_date"],
-        },
         model=GetAccountAnalyticsInput,
         handler=lambda client, args: client.get_account_analytics(
             start_date=args.start_date,
@@ -321,33 +239,6 @@ REGISTRY: dict[str, ToolSpec] = {
             "Create multiple pins on a board. Automatically rate-limited to 10/min. "
             "Each pin must include either image_url or image_path."
         ),
-        input_schema={
-            "type": "object",
-            "properties": {
-                "board_id": {"type": "string"},
-                "dry_run": {"type": "boolean", "default": False},
-                "pins": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "title": {"type": "string"},
-                            "description": {"type": "string"},
-                            "image_url": {"type": "string"},
-                            "image_path": {"type": "string"},
-                            "link": {"type": "string"},
-                            "alt_text": {"type": "string"},
-                        },
-                        "required": ["title"],
-                        "anyOf": [
-                            {"required": ["image_url"]},
-                            {"required": ["image_path"]},
-                        ],
-                    },
-                },
-            },
-            "required": ["board_id", "pins"],
-        },
         model=BulkCreatePinsInput,
         handler=lambda client, args: client.bulk_create_pins(
             board_id=args.board_id,
@@ -358,13 +249,6 @@ REGISTRY: dict[str, ToolSpec] = {
     "get_trending": ToolSpec(
         name="get_trending",
         description="Get trending searches and topics in a Pinterest interest category.",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "interest": {"type": "string", "default": "miniatures"},
-                "region": {"type": "string", "default": "US"},
-            },
-        },
         model=GetTrendingInput,
         handler=lambda client, args: client.get_trending(
             interest=args.interest,

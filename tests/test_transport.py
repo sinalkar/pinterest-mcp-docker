@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
+from mcp import ClientSession
+from mcp.shared.memory import create_client_server_memory_streams
 from starlette.testclient import TestClient
 
-from pinterest_mcp.app import list_tools
+from pinterest_mcp.app import get_lowlevel_server, list_tools, set_client
 from pinterest_mcp.cli import main
+from pinterest_mcp.client import PinterestClient
 from pinterest_mcp.config import ConfigError, Settings, Transport, load_settings
 from pinterest_mcp.http_app import create_http_app
+from pinterest_mcp.tools import REGISTRY
 
 
 def test_default_transport_is_stdio():
@@ -25,9 +31,98 @@ def test_invalid_transport_exits_nonzero(monkeypatch):
 
 def test_non_loopback_without_auth_token_aborts():
     with pytest.raises(
-        ConfigError, match="MCP_AUTH_TOKEN is required when MCP_HOST is not loopback"
+        ConfigError, match="MCP_AUTH_TOKEN or MCP_OAUTH_ISSUER is required"
     ):
         load_settings({"MCP_TRANSPORT": "http", "MCP_HOST": "0.0.0.0"})
+
+
+def test_non_loopback_with_oauth_issuer_but_no_bearer_token_is_accepted():
+    """OAuth resource-server mode is an accepted alternative to the shared
+    bearer token for satisfying the non-loopback auth requirement."""
+    settings = load_settings(
+        {
+            "MCP_TRANSPORT": "http",
+            "MCP_HOST": "0.0.0.0",
+            "MCP_OAUTH_ISSUER": "https://issuer.example.com",
+        }
+    )
+    assert settings.effective_auth_mode == "oauth"
+
+
+def test_bearer_token_and_oauth_issuer_are_mutually_exclusive():
+    with pytest.raises(ConfigError, match="mutually exclusive"):
+        load_settings(
+            {
+                "MCP_AUTH_TOKEN": "secret",
+                "MCP_OAUTH_ISSUER": "https://issuer.example.com",
+            }
+        )
+
+
+def test_stateless_and_resumability_are_incompatible():
+    with pytest.raises(ConfigError, match="MCP_STATELESS and MCP_RESUMABILITY"):
+        load_settings({"MCP_STATELESS": "true", "MCP_RESUMABILITY": "true"})
+
+
+def test_stateless_and_sse_transport_are_incompatible():
+    with pytest.raises(ConfigError, match="MCP_STATELESS is incompatible"):
+        load_settings({"MCP_STATELESS": "true", "MCP_TRANSPORT": "sse"})
+
+
+def test_cors_wildcard_with_credentials_is_rejected():
+    with pytest.raises(ConfigError, match="MCP_CORS_ALLOW_CREDENTIALS"):
+        load_settings({"MCP_ALLOWED_ORIGINS": "*", "MCP_CORS_ALLOW_CREDENTIALS": "true"})
+
+
+def test_allowed_hosts_and_origins_accept_comma_separated_strings():
+    settings = load_settings(
+        {
+            "MCP_ALLOWED_HOSTS": "example.com:443, other.example.com:443",
+            "MCP_ALLOWED_ORIGINS": "https://a.example.com, https://b.example.com",
+        }
+    )
+    assert settings.allowed_hosts == ["example.com:443", "other.example.com:443"]
+    assert settings.allowed_origins == ["https://a.example.com", "https://b.example.com"]
+
+
+def test_loopback_default_allowed_hosts_and_origins_when_unconfigured():
+    settings = load_settings({"MCP_TRANSPORT": "http", "MCP_HOST": "127.0.0.1"})
+    assert settings.effective_allowed_hosts == ["127.0.0.1:*", "localhost:*", "[::1]:*"]
+    assert settings.effective_allowed_origins_for_security == [
+        "http://127.0.0.1:*",
+        "http://localhost:*",
+        "http://[::1]:*",
+    ]
+
+
+def test_defaults_reproduce_pre_change_behavior():
+    """A config using only pre-change variables must behave exactly as before:
+    stdio by default, no SSE surface, no browser origins allowed."""
+    settings = load_settings({})
+    assert settings.transport is Transport.STDIO
+    assert settings.json_response is False
+    assert settings.stateless is False
+    assert settings.resumability is False
+    assert settings.dns_rebinding_protection is True
+    assert settings.allowed_origins == []
+    assert settings.effective_auth_mode == "none"
+
+
+def test_sse_and_streamable_paths_must_differ():
+    with pytest.raises(ConfigError, match="must be different paths"):
+        load_settings({"MCP_TRANSPORT": "http+sse", "MCP_PATH": "/mcp", "MCP_SSE_PATH": "/mcp"})
+
+
+def test_message_path_colliding_with_mcp_path_is_rejected():
+    with pytest.raises(ConfigError, match="MCP_MESSAGE_PATH"):
+        load_settings({"MCP_MESSAGE_PATH": "/mcp"})
+
+
+def test_four_transport_values_are_all_accepted(monkeypatch):
+    for value in ("stdio", "http", "sse", "http+sse"):
+        monkeypatch.setenv("MCP_TRANSPORT", value)
+        settings = load_settings()
+        assert settings.transport.value == value
 
 
 def test_healthz_endpoint_returns_200_no_secrets():
@@ -88,3 +183,48 @@ async def test_both_transports_advertise_identical_tool_schemas():
 
     assert app_stdio is not None
     assert app_http is not None
+
+
+@pytest.mark.asyncio
+async def test_wire_protocol_end_to_end_over_memory_transport():
+    """Drive the real MCP wire protocol through a `ClientSession`, not just the
+    module-level `list_tools`/`call_tool` functions.
+
+    The migration to `MCPServer` changed the low-level `RequestHandler`
+    signature from `(req)` to `(ctx, params)`; a handler still written for the
+    old signature imports fine and passes every test that calls `list_tools`/
+    `call_tool` directly, but fails at the first real `tools/call` with a
+    `TypeError` inside the server's request dispatch. Only a client driving
+    the actual wire protocol catches that class of regression.
+    """
+    set_client(PinterestClient(access_token="fake-token"))
+    lowlevel = get_lowlevel_server()
+
+    async with create_client_server_memory_streams() as (client_streams, server_streams):
+        client_read, client_write = client_streams
+        server_read, server_write = server_streams
+
+        async def run_server():
+            await lowlevel.run(server_read, server_write, lowlevel.create_initialization_options())
+
+        server_task = asyncio.create_task(run_server())
+        try:
+            async with ClientSession(client_read, client_write) as session:
+                await session.initialize()
+                tools_result = await session.list_tools()
+                assert {t.name for t in tools_result.tools} == set(REGISTRY)
+
+                # Unknown tool: sanitized error in the content body, not a
+                # protocol-level `isError` failure.
+                result = await session.call_tool("nonexistent_tool", {})
+                assert result.is_error is False
+                assert "Unknown or unadvertised tool" in result.content[0].text
+
+                # Invalid arguments: same sanitized shape.
+                result = await session.call_tool(
+                    "list_boards", {"privacy": "ALL", "unknown_arg": "x"}
+                )
+                assert result.is_error is False
+                assert "security_error" in result.content[0].text
+        finally:
+            server_task.cancel()
