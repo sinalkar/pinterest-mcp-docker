@@ -409,3 +409,9 @@ Distributed under the **[MIT License](LICENSE)**.
 - **Fork Maintainer:** sanjay s ([`sinalkar/pinterest-mcp-docker`](https://github.com/sinalkar/pinterest-mcp-docker))
 
 See [NOTICE.md](NOTICE.md) for full licensing details and modifications summary.
+
+---
+
+> [!NOTE]
+> **Disclaimer:** This is an unofficial Model Context Protocol (MCP) server and is not affiliated with, endorsed by, or sponsored by Pinterest, Inc.
+
