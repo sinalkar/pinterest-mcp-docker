@@ -1,8 +1,6 @@
-version: "3.8"
-
 services:
   pinterest-mcp:
-    image: ghcr.io/sinalkar/pinterest-mcp-docker:latest
+    image: sinalkar/pinterest-mcp-docker:latest
     build:
       context: .
       dockerfile: Dockerfile
