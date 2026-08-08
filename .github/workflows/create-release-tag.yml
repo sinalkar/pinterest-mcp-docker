@@ -1,6 +1,20 @@
 name: Create Release Tag
 
 'on':
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'openspec/**'
+      - 'docs/**'
+      - '**/*.md'
+      - '.gitignore'
+      - '.devin/**'
+      - '.claude/**'
+      - '.cursor/**'
+      - '.gemini/**'
+      - '.codex/**'
+      - '.agent/**'
+      - '.agents/**'
   workflow_dispatch:
     inputs:
       version:
@@ -21,6 +35,9 @@ permissions:
   contents: write
   actions: write
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+
 jobs:
   tag-and-release:
     name: Create Tag & Trigger Release Workflow
@@ -37,7 +54,7 @@ jobs:
           INPUT_VER="${{ github.event.inputs.version }}"
           BUMP="${{ github.event.inputs.bump }}"
 
-          if [ -n "$INPUT_VER" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "$INPUT_VER" ]; then
             CLEAN_VER="${INPUT_VER#v}"
             if ! [[ "$CLEAN_VER" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
               echo "::error::version must be in x.y.z format (got '$INPUT_VER')" >&2
@@ -45,6 +62,14 @@ jobs:
             fi
             TAG="v${CLEAN_VER}"
           else
+            # Automatic path (push to main) always patch-bumps; manual dispatch
+            # without an explicit version uses the chosen bump type (default patch).
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+              EFFECTIVE_BUMP="$BUMP"
+            else
+              EFFECTIVE_BUMP="patch"
+            fi
+
             LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
             V_NUM="${LATEST_TAG#v}"
             IFS='.' read -r MAJOR MINOR PATCH <<< "$V_NUM"
@@ -52,11 +77,11 @@ jobs:
             MINOR=${MINOR:-0}
             PATCH=${PATCH:-0}
 
-            if [ "$BUMP" = "major" ]; then
+            if [ "$EFFECTIVE_BUMP" = "major" ]; then
               MAJOR=$((MAJOR + 1))
               MINOR=0
               PATCH=0
-            elif [ "$BUMP" = "minor" ]; then
+            elif [ "$EFFECTIVE_BUMP" = "minor" ]; then
               MINOR=$((MINOR + 1))
               PATCH=0
             else
@@ -68,14 +93,65 @@ jobs:
           echo "Calculated tag: $TAG"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
+      - name: Update changelog for automatic release
+        if: github.event_name == 'push'
+        env:
+          TAG: ${{ steps.calc.outputs.tag }}
+        run: |
+          VERSION="${TAG#v}"
+          TODAY=$(date -u +%Y-%m-%d)
+
+          if grep -q "^## \[Unreleased\]" CHANGELOG.md; then
+            # Promote the existing Unreleased section to this version.
+            sed -i "s/^## \[Unreleased\]/## [${VERSION}] - ${TODAY}/" CHANGELOG.md
+          else
+            # No pending Unreleased notes: insert a minimal entry summarizing
+            # the commits merged since the previous tag.
+            PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+            if [ -n "$PREV_TAG" ]; then
+              RANGE="${PREV_TAG}..HEAD"
+            else
+              RANGE="HEAD"
+            fi
+            {
+              echo "## [${VERSION}] - ${TODAY}"
+              echo ""
+              echo "### Changed"
+              echo ""
+              git log "$RANGE" --pretty=format:"- %s" --no-merges 2>/dev/null || echo "- Automated patch release"
+              echo ""
+            } > /tmp/changelog-entry.md
+
+            awk -v entry="/tmp/changelog-entry.md" '
+              /^## \[/ && !done { while ((getline line < entry) > 0) print line; done=1 }
+              { print }
+            ' CHANGELOG.md > /tmp/CHANGELOG.md.new
+            mv /tmp/CHANGELOG.md.new CHANGELOG.md
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet -- CHANGELOG.md; then
+            git add CHANGELOG.md
+            git commit -m "docs(changelog): add entry for ${TAG} [skip ci]"
+            git push origin HEAD:main
+          fi
+
       - name: Create and push tag
         env:
           TAG: ${{ steps.calc.outputs.tag }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "::error::Tag $TAG already exists on origin - refusing to overwrite it." >&2
+            exit 1
+          fi
           git tag -a "$TAG" -m "Release $TAG"
-          git push origin "$TAG"
+          if ! git push origin "$TAG"; then
+            echo "::error::Failed to push tag $TAG - it may have just been created by a concurrent run." >&2
+            exit 1
+          fi
 
       - name: Trigger Release Workflow
         env:
