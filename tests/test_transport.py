@@ -30,9 +30,7 @@ def test_invalid_transport_exits_nonzero(monkeypatch):
 
 
 def test_non_loopback_without_auth_token_aborts():
-    with pytest.raises(
-        ConfigError, match="MCP_AUTH_TOKEN or MCP_OAUTH_ISSUER is required"
-    ):
+    with pytest.raises(ConfigError, match="MCP_AUTH_TOKEN or MCP_OAUTH_ISSUER is required"):
         load_settings({"MCP_TRANSPORT": "http", "MCP_HOST": "0.0.0.0"})
 
 
@@ -536,8 +534,3 @@ def test_protocol_version_negotiation_and_mismatched_headers():
             },
         )
         assert res_mismatch.status_code in (400, 404, 421)
-
-
-
-
-

@@ -132,9 +132,7 @@ def create_http_app(settings: Settings | None = None) -> Starlette:
         async def handle_sse(scope: Scope, receive: Receive, send: Send) -> None:
             async with sse_transport.connect_sse(scope, receive, send) as streams:
                 lowlevel = get_lowlevel_server()
-                await lowlevel.run(
-                    streams[0], streams[1], lowlevel.create_initialization_options()
-                )
+                await lowlevel.run(streams[0], streams[1], lowlevel.create_initialization_options())
 
         if is_oauth:
             from mcp.server.auth.middleware.bearer_auth import RequireAuthMiddleware
@@ -161,6 +159,7 @@ def create_http_app(settings: Settings | None = None) -> Starlette:
                 )
             )
         else:
+
             async def sse_endpoint(request: Request) -> Response:
                 await handle_sse(request.scope, request.receive, request._send)
                 return Response()
@@ -241,4 +240,3 @@ def create_http_app(settings: Settings | None = None) -> Starlette:
         middleware.append(Middleware(AuthContextMiddleware))
 
     return Starlette(routes=routes, middleware=middleware, lifespan=lifespan)
-

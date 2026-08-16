@@ -20,9 +20,7 @@ class InMemoryEventStore(EventStore):
         self._streams: dict[StreamId, collections.deque[tuple[EventId, JSONRPCMessage | None]]] = {}
         self._event_to_stream: dict[EventId, StreamId] = {}
 
-    async def store_event(
-        self, stream_id: StreamId, message: JSONRPCMessage | None
-    ) -> EventId:
+    async def store_event(self, stream_id: StreamId, message: JSONRPCMessage | None) -> EventId:
         event_id = str(uuid.uuid4())
         if stream_id not in self._streams:
             self._streams[stream_id] = collections.deque(maxlen=self.max_events_per_stream)
