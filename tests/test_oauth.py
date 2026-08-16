@@ -215,5 +215,3 @@ def test_oauth_end_to_end_middleware(rsa_key_pair, monkeypatch, caplog):
             assert valid_tok not in record.message
             assert insufficient_tok not in record.message
             assert expired_tok not in record.message
-
-

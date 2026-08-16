@@ -72,4 +72,3 @@ def test_readme_configuration_table_covers_all_settings_fields():
         assert env_alias in env_vars_in_readme, (
             f"Field {env_alias} missing in README configuration table"
         )
-
