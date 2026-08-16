@@ -5,12 +5,18 @@ All notable changes to `pinterest-mcp-docker` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
 
-### ⚠️ BREAKING CHANGES
+## [0.2.1] - 2026-08-08
 
-- **`mcp` dependency floor raised to `>=2.0.0`:** the code already required SDK 2.0 behavior (the installed and pinned version was already `2.0.0`), but `pyproject.toml` understated the floor as `>=1.9.0`. Installs pinned below `2.0.0` will now fail to resolve rather than installing an incompatible SDK.
-- **Internal server API migrated from the low-level `mcp.server.Server` to `mcp.server.mcpserver.MCPServer`:** no MCP client observes a wire-protocol difference, but the advertised tool input schemas are now derived from each tool's Pydantic model instead of hand-written. This adds real field constraints (string/array lengths) that were previously undeclared, and drops the cross-field "exactly one of `image_url`/`image_path`" hint from the advertised schema for `create_pin` and each item of `bulk_create_pins` — that rule is still enforced at call time, just no longer visible in the schema. Modules that imported `pinterest_mcp.app.mcp_app` expecting a low-level `Server` should use the new `pinterest_mcp.app.get_lowlevel_server()` accessor instead.
+### Changed
+
+- feat: add automatic changelog updates and push-based tagging with concurrency controls
+- feat: add auto-increment versioning logic and direct release workflow triggering to tag creation process
+- refactor: consolidate docker authentication token usage using workflow environment variables
+- ci: align secret names DOCKER_TOKEN and DOCKER_USERNAME with shradhanjali-banner workflow
+- ci: push to Docker Hub under username sinalkar on successful main build
+- fix(ci): separate Docker CI and Docker Hub release workflows cleanly
+- ci: add continue-on-error to Docker Hub login in docker.yml
 
 ## [0.2.0] - 2026-08-02
 
