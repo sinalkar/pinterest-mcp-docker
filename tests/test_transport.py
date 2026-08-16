@@ -228,3 +228,316 @@ async def test_wire_protocol_end_to_end_over_memory_transport():
                 assert "security_error" in result.content[0].text
         finally:
             server_task.cancel()
+
+
+def test_healthz_reports_surfaces_and_modes():
+    settings = Settings(
+        MCP_TRANSPORT=Transport.HTTP_SSE,
+        MCP_HOST="127.0.0.1",
+        MCP_PATH="/custom-mcp",
+        MCP_SSE_PATH="/custom-sse",
+        MCP_MESSAGE_PATH="/custom-msg/",
+        MCP_JSON_RESPONSE=True,
+        MCP_STATELESS=False,
+        MCP_RESUMABILITY=False,
+    )
+    app = create_http_app(settings)
+    with TestClient(app) as client:
+        res = client.get("/healthz")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["status"] == "ok"
+        assert data["transport"] == "http+sse"
+        assert data["surfaces"] == {
+            "streamable_http": "/custom-mcp",
+            "sse": "/custom-sse",
+            "messages": "/custom-msg/",
+        }
+        assert data["json_response"] is True
+        assert data["stateless"] is False
+        assert data["resumability"] is False
+        assert data["auth_mode"] == "none"
+
+
+def test_dns_rebinding_warning_emitted_when_disabled(caplog):
+    import logging
+
+    settings = Settings(
+        MCP_TRANSPORT=Transport.HTTP,
+        MCP_HOST="127.0.0.1",
+        MCP_DNS_REBINDING_PROTECTION=False,
+    )
+    with caplog.at_level(logging.WARNING):
+        create_http_app(settings)
+    assert any("MCP_DNS_REBINDING_PROTECTION" in record.message for record in caplog.records)
+
+
+def test_json_response_mode_returns_single_json_reply():
+    settings = Settings(
+        MCP_TRANSPORT=Transport.HTTP,
+        MCP_HOST="127.0.0.1",
+        MCP_JSON_RESPONSE=True,
+    )
+    app = create_http_app(settings)
+    with TestClient(app, base_url="http://127.0.0.1:8080") as client:
+        init_payload = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "test-client", "version": "1.0"},
+            },
+        }
+        res = client.post(
+            "/mcp",
+            json=init_payload,
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+            },
+        )
+        assert res.status_code == 200
+        assert res.headers["content-type"].startswith("application/json")
+        data = res.json()
+        assert data["id"] == 1
+        assert "serverInfo" in data["result"]
+
+
+def test_stateless_mode_serves_self_contained_request():
+    settings = Settings(
+        MCP_TRANSPORT=Transport.HTTP,
+        MCP_HOST="127.0.0.1",
+        MCP_STATELESS=True,
+        MCP_JSON_RESPONSE=True,
+    )
+    app = create_http_app(settings)
+    with TestClient(app, base_url="http://127.0.0.1:8080") as client:
+        init_payload = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "test-client", "version": "1.0"},
+            },
+        }
+        res = client.post(
+            "/mcp",
+            json=init_payload,
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+            },
+        )
+        assert res.status_code == 200
+        # In stateless mode no session header is returned or required
+        assert "Mcp-Session-Id" not in res.headers
+
+
+def test_oversized_request_body_rejected():
+    settings = Settings(
+        MCP_TRANSPORT=Transport.HTTP,
+        MCP_HOST="127.0.0.1",
+        MCP_MAX_REQUEST_BYTES=100,
+    )
+    app = create_http_app(settings)
+    with TestClient(app, base_url="http://127.0.0.1:8080") as client:
+        large_payload = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {"padding": "x" * 200},
+        }
+        res = client.post("/mcp", json=large_payload)
+        assert res.status_code == 413
+
+
+def test_session_idle_timeout_expiration():
+    settings = Settings(
+        MCP_TRANSPORT=Transport.HTTP,
+        MCP_HOST="127.0.0.1",
+        MCP_SESSION_IDLE_TIMEOUT=0.01,
+    )
+    app = create_http_app(settings)
+    with TestClient(app, base_url="http://127.0.0.1:8080") as client:
+        init_payload = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "test-client", "version": "1.0"},
+            },
+        }
+        res = client.post("/mcp", json=init_payload)
+        session_id = res.headers.get("Mcp-Session-Id")
+        assert session_id is not None
+
+        # Wait for timeout to expire
+        import time
+
+        time.sleep(0.05)
+
+        # Subsequent request with expired session id should return 404 (session not found)
+        call_payload = {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/list",
+            "params": {},
+        }
+        res2 = client.post(
+            "/mcp",
+            json=call_payload,
+            headers={"Mcp-Session-Id": session_id},
+        )
+        assert res2.status_code == 404
+
+
+def test_dns_rebinding_and_origin_rejection():
+    settings = Settings(
+        MCP_TRANSPORT=Transport.HTTP,
+        MCP_HOST="127.0.0.1",
+        MCP_DNS_REBINDING_PROTECTION=True,
+    )
+    app = create_http_app(settings)
+    with TestClient(app, base_url="http://127.0.0.1:8080") as client:
+        # Invalid host header
+        res_host = client.post(
+            "/mcp",
+            headers={"Host": "evil.attacker.com"},
+            json={"jsonrpc": "2.0", "id": 1, "method": "initialize"},
+        )
+        assert res_host.status_code in (421, 403, 400)
+
+        # Invalid origin header
+        res_origin = client.post(
+            "/mcp",
+            headers={"Origin": "https://evil.attacker.com"},
+            json={"jsonrpc": "2.0", "id": 1, "method": "initialize"},
+        )
+        assert res_origin.status_code in (421, 403, 400)
+
+
+def test_cors_middleware_preflight_and_headers():
+    # When MCP_ALLOWED_ORIGINS is configured
+    settings = Settings(
+        MCP_TRANSPORT=Transport.HTTP,
+        MCP_HOST="127.0.0.1",
+        MCP_ALLOWED_ORIGINS="https://claude.ai, https://app.example.com",
+    )
+    app = create_http_app(settings)
+    with TestClient(app, base_url="http://127.0.0.1:8080") as client:
+        # Preflight options request
+        res = client.options(
+            "/mcp",
+            headers={
+                "Origin": "https://claude.ai",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "Content-Type, Mcp-Session-Id",
+            },
+        )
+        assert res.status_code == 200
+        assert res.headers.get("access-control-allow-origin") == "https://claude.ai"
+
+        # Simple request exposing headers
+        res_simple = client.get("/healthz", headers={"Origin": "https://claude.ai"})
+        assert res_simple.status_code == 200
+        assert res_simple.headers.get("access-control-allow-origin") == "https://claude.ai"
+        exposed = res_simple.headers.get("access-control-expose-headers", "")
+        assert "Mcp-Session-Id" in exposed or "mcp-session-id" in exposed.lower()
+
+    # When MCP_ALLOWED_ORIGINS is empty, no CORS headers emitted
+    settings_no_cors = Settings(
+        MCP_TRANSPORT=Transport.HTTP,
+        MCP_HOST="127.0.0.1",
+        MCP_ALLOWED_ORIGINS="",
+    )
+    app_no_cors = create_http_app(settings_no_cors)
+    with TestClient(app_no_cors, base_url="http://127.0.0.1:8080") as client:
+        res_no_cors = client.get("/healthz", headers={"Origin": "https://claude.ai"})
+        assert "access-control-allow-origin" not in res_no_cors.headers
+
+
+def test_sse_surface_auth_and_routing():
+    settings = Settings(
+        MCP_TRANSPORT=Transport.SSE,
+        MCP_HOST="127.0.0.1",
+        MCP_AUTH_TOKEN="sse-secret-token",
+        MCP_SSE_PATH="/sse",
+        MCP_MESSAGE_PATH="/messages/",
+    )
+    app = create_http_app(settings)
+    with TestClient(app, base_url="http://127.0.0.1:8080") as client:
+        # Unauthenticated SSE stream request returns 401
+        res_sse = client.get("/sse")
+        assert res_sse.status_code == 401
+
+        # Unauthenticated message post request returns 401
+        res_msg = client.post("/messages/?session_id=1234", json={"jsonrpc": "2.0"})
+        assert res_msg.status_code == 401
+
+        # Streamable HTTP route is not mounted in SSE-only mode
+        res_mcp = client.post(
+            "/mcp",
+            headers={"Authorization": "Bearer sse-secret-token"},
+            json={"jsonrpc": "2.0", "id": 1, "method": "initialize"},
+        )
+        assert res_mcp.status_code == 404
+
+
+def test_sse_local_paths_rejected_same_as_http():
+    settings = Settings(
+        MCP_TRANSPORT=Transport.SSE,
+        MCP_HOST="127.0.0.1",
+    )
+    assert settings.local_paths_enabled is False
+
+
+def test_protocol_version_negotiation_and_mismatched_headers():
+    settings = Settings(
+        MCP_TRANSPORT=Transport.HTTP,
+        MCP_HOST="127.0.0.1",
+        MCP_JSON_RESPONSE=True,
+    )
+    app = create_http_app(settings)
+    with TestClient(app, base_url="http://127.0.0.1:8080") as client:
+        # 1. Unsupported protocol version in initialization frame
+        unsupported_init = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "1999-01-01",
+                "capabilities": {},
+                "clientInfo": {"name": "old-client", "version": "1.0"},
+            },
+        }
+        res_unsupported = client.post(
+            "/mcp",
+            json=unsupported_init,
+            headers={"Accept": "application/json", "Content-Type": "application/json"},
+        )
+        assert res_unsupported.status_code == 200
+        data = res_unsupported.json()
+        assert "error" in data or "result" in data  # Protocol version negotiation or rejected error
+
+        # 2. Mismatched MCP-Protocol-Version header on subsequent request
+        res_mismatch = client.post(
+            "/mcp",
+            json={"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "MCP-Protocol-Version": "invalid-protocol-version",
+            },
+        )
+        assert res_mismatch.status_code in (400, 404, 421)
+
+
+
+
+

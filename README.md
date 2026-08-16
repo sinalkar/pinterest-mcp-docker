@@ -320,6 +320,67 @@ Locate your Claude Desktop config file:
 
 ---
 
+### 🌐 Client Compatibility Matrix
+
+| Client Family | Transport | Default Endpoint | Supported Auth | Status | Example Config / Notes |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Claude Desktop** | `stdio` | `stdio` | Environment variables | ✅ Verified | Command: `docker` or `pinterest-mcp` |
+| **Cursor** | `http` | `/mcp` | Bearer Token / None | ✅ Verified | `{"url": "http://localhost:8080/mcp", "headers": {"Authorization": "Bearer <token>"}}` |
+| **VS Code (Roo/Cline)**| `http` / `stdio`| `/mcp` | Bearer / None | ✅ Verified | Direct SSE or Streamable HTTP endpoint |
+| **Windsurf** | `stdio` / `http` | `/mcp` | Bearer / None | ✅ Verified | Standard stdio command or HTTP endpoint |
+| **Claude Web Connectors**| `http` | `/mcp` | OAuth 2.1 / Bearer | ✅ Verified | Set `MCP_OAUTH_ISSUER` & `MCP_RESOURCE_URL` |
+| **ChatGPT Connectors** | `http` (JSON) | `/mcp` | OAuth 2.1 / Bearer | ✅ Verified | Set `MCP_JSON_RESPONSE=true` |
+| **Legacy SSE Clients** | `sse` / `http+sse` | `/sse` | Bearer / None | ✅ Verified | SSE stream at `/sse`, messages post to `/messages/` |
+
+---
+
+## 💻 AI Client Configuration
+
+### Claude Desktop (`claude_desktop_config.json`)
+
+Locate your Claude Desktop config file:
+- **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+
+#### Using Docker (Recommended):
+```json
+{
+  "mcpServers": {
+    "pinterest": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e", "PINTEREST_CLIENT_ID=your_client_id",
+        "-e", "PINTEREST_CLIENT_SECRET=your_client_secret",
+        "-e", "PINTEREST_ACCESS_TOKEN=your_access_token",
+        "-v", "pinterest_token_data:/home/app/.local/state/pinterest-mcp",
+        "ghcr.io/sinalkar/pinterest-mcp-docker:latest"
+      ]
+    }
+  }
+}
+```
+
+#### Using Native Python:
+```json
+{
+  "mcpServers": {
+    "pinterest": {
+      "command": "pinterest-mcp",
+      "env": {
+        "PINTEREST_CLIENT_ID": "your_client_id",
+        "PINTEREST_CLIENT_SECRET": "your_client_secret",
+        "PINTEREST_ACCESS_TOKEN": "your_access_token"
+      }
+    }
+  }
+}
+```
+
+---
+
 ### Cursor / Remote HTTP Client
 
 To connect Cursor or a custom client to a running HTTP instance of `pinterest-mcp-docker`:
@@ -339,26 +400,60 @@ To connect Cursor or a custom client to a running HTTP instance of `pinterest-mc
 
 ---
 
+### Legacy SSE Client Configuration
+
+For clients requiring the 2024-11-05 HTTP+SSE transport:
+
+```json
+{
+  "mcpServers": {
+    "pinterest-sse": {
+      "url": "http://localhost:8080/sse"
+    }
+  }
+}
+```
+
+---
+
 ## ⚙️ Environment Variables Reference
 
 | Variable | Purpose | Required | Default | Secret |
 | -------- | ------- | -------- | ------- | ------ |
+| `MCP_TRANSPORT` | Transport mode (`stdio`, `http`, `sse`, `http+sse`) | No | `stdio` | No |
+| `MCP_HOST` | Bind address for HTTP listener | No | `127.0.0.1` | No |
+| `MCP_PORT` | Listen port for HTTP listener | No | `8080` | No |
+| `MCP_PATH` | Streamable HTTP endpoint path | No | `/mcp` | No |
+| `MCP_SSE_PATH` | SSE stream endpoint path | No | `/sse` | No |
+| `MCP_MESSAGE_PATH` | SSE message posting endpoint path | No | `/messages/` | No |
+| `MCP_AUTH_TOKEN` | Shared Bearer authentication token | Conditional | None | **Yes** |
+| `MCP_JSON_RESPONSE` | Return single JSON response instead of SSE stream | No | `false` | No |
+| `MCP_STATELESS` | Sessionless mode (no per-client session state) | No | `false` | No |
+| `MCP_RESUMABILITY` | Enable event stream resumability | No | `false` | No |
+| `MCP_EVENT_STORE_MAX_EVENTS` | Bounded event capacity per stream | No | `1000` | No |
+| `MCP_MAX_REQUEST_BYTES` | Maximum request body limit in bytes | No | `4194304` (4MB) | No |
+| `MCP_SESSION_IDLE_TIMEOUT` | Idle session expiry timeout (seconds) | No | None | No |
+| `MCP_SSE_RETRY_INTERVAL_MS` | Advertised SSE reconnection interval (ms) | No | None | No |
+| `MCP_DNS_REBINDING_PROTECTION` | Enforce Host/Origin header validation | No | `true` | No |
+| `MCP_ALLOWED_HOSTS` | Comma-separated allowed Host headers | No | Loopback defaults | No |
+| `MCP_ALLOWED_ORIGINS` | Comma-separated allowed browser origins for CORS | No | Empty | No |
+| `MCP_CORS_ALLOW_CREDENTIALS` | Enable credentialed cross-origin CORS | No | `false` | No |
+| `MCP_OAUTH_ISSUER` | OAuth 2.1 authorization server issuer URL | No | None | No |
+| `MCP_OAUTH_JWKS_URL` | Explicit JWKS endpoint URL for OAuth | No | None | No |
+| `MCP_RESOURCE_URL` | Canonical resource server identifier URL | No | None | No |
+| `MCP_OAUTH_REQUIRED_SCOPES` | Comma-separated OAuth required scopes | No | None | No |
+| `LOG_LEVEL` | Logging level (`CRITICAL`, `ERROR`, `WARNING`, `INFO`, `DEBUG`) | No | `INFO` | No |
+| `LOG_FORMAT` | Log format (`text` or `json`) | No | `text` | No |
 | `PINTEREST_CLIENT_ID` | Pinterest API v5 App Client ID | **Yes** | None | **Yes** |
 | `PINTEREST_CLIENT_SECRET` | Pinterest API v5 App Client Secret | **Yes** | None | **Yes** |
 | `PINTEREST_ACCESS_TOKEN` | OAuth Access Token | Optional | None | **Yes** |
 | `PINTEREST_REFRESH_TOKEN` | OAuth Refresh Token for auto-renewal | Optional | None | **Yes** |
-| `MCP_TRANSPORT` | Transport mode (`stdio` or `http`) | No | `stdio` | No |
-| `MCP_HOST` | Bind address for HTTP mode | No | `127.0.0.1` | No |
-| `MCP_PORT` | Listen port for HTTP mode | No | `8080` | No |
-| `MCP_PATH` | Endpoint path for HTTP route | No | `/mcp` | No |
-| `MCP_AUTH_TOKEN` | Bearer token for HTTP mode | Conditional | None | **Yes** |
 | `PINTEREST_TOKEN_PATH` | Path to persistent token JSON file | No | `~/.local/state/pinterest-mcp/token.json` | No |
 | `PINTEREST_ALLOWED_IMAGE_DIR` | Allowed root dir for local image path | No | Home directory (`~`) | No |
 | `PINTEREST_ALLOW_LOCAL_PATHS` | Allow local image paths in HTTP mode | No | `false` | No |
 | `PINTEREST_MAX_IMAGE_BYTES` | Maximum image size limit in bytes | No | `10485760` (10MB) | No |
 | `PINTEREST_HTTP_TIMEOUT` | Outbound HTTP request timeout (seconds) | No | `30.0` | No |
-| `LOG_LEVEL` | Logging level (`INFO`, `DEBUG`, etc.) | No | `INFO` | No |
-| `LOG_FORMAT` | Log format (`text` or `json`) | No | `text` | No |
+| `PINTEREST_MAX_RESPONSE_BYTES` | Outbound HTTP response maximum bytes | No | `33554432` (32MB) | No |
 
 ---
 

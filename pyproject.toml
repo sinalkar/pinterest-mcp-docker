@@ -36,8 +36,11 @@ http = [
     "starlette>=0.37.0",
     "uvicorn>=0.30.0",
 ]
+oauth = [
+    "pyjwt[crypto]>=2.8.0",
+]
 dev = [
-    "pinterest-mcp-docker[http]",
+    "pinterest-mcp-docker[http,oauth]",
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=5.0.0",

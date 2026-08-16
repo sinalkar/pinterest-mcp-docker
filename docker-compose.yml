@@ -1,4 +1,5 @@
 services:
+  # 1. Streamable HTTP (Default bearer auth deployment)
   pinterest-mcp:
     image: sinalkar/pinterest-mcp-docker:latest
     build:
@@ -15,10 +16,10 @@ services:
       - .env
     environment:
       - MCP_TRANSPORT=http
-      - MCP_HOST=0.0.0.0
+      - MCP_HOST=127.0.0.1
       - MCP_PORT=8080
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     volumes:
       - pinterest_token_data:/home/app/.local/state/pinterest-mcp
     tmpfs:
@@ -29,7 +30,175 @@ services:
       timeout: 5s
       retries: 3
       start_period: 5s
+    profiles:
+      - default
+      - http
+
+  # 2. Stdio Interactive Mode
+  pinterest-mcp-stdio:
+    image: sinalkar/pinterest-mcp-docker:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pinterest-mcp-stdio
+    stdin_open: true
+    tty: false
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    env_file:
+      - .env
+    environment:
+      - MCP_TRANSPORT=stdio
+    volumes:
+      - pinterest_token_data:/home/app/.local/state/pinterest-mcp
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    profiles:
+      - stdio
+
+  # 3. JSON Response Mode
+  pinterest-mcp-json:
+    image: sinalkar/pinterest-mcp-docker:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pinterest-mcp-json
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    env_file:
+      - .env
+    environment:
+      - MCP_TRANSPORT=http
+      - MCP_HOST=127.0.0.1
+      - MCP_PORT=8080
+      - MCP_JSON_RESPONSE=true
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - pinterest_token_data:/home/app/.local/state/pinterest-mcp
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8080/healthz\")'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    profiles:
+      - json-response
+
+  # 4. Stateless Mode
+  pinterest-mcp-stateless:
+    image: sinalkar/pinterest-mcp-docker:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pinterest-mcp-stateless
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    env_file:
+      - .env
+    environment:
+      - MCP_TRANSPORT=http
+      - MCP_HOST=127.0.0.1
+      - MCP_PORT=8080
+      - MCP_STATELESS=true
+      - MCP_JSON_RESPONSE=true
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - pinterest_token_data:/home/app/.local/state/pinterest-mcp
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8080/healthz\")'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    profiles:
+      - stateless
+
+  # 5. SSE Compatibility Surface (HTTP + SSE)
+  pinterest-mcp-sse:
+    image: sinalkar/pinterest-mcp-docker:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pinterest-mcp-sse
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    env_file:
+      - .env
+    environment:
+      - MCP_TRANSPORT=http+sse
+      - MCP_HOST=127.0.0.1
+      - MCP_PORT=8080
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - pinterest_token_data:/home/app/.local/state/pinterest-mcp
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8080/healthz\")'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    profiles:
+      - sse
+
+  # 6. OAuth Resource-Server Mode
+  pinterest-mcp-oauth:
+    image: sinalkar/pinterest-mcp-docker:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pinterest-mcp-oauth
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    env_file:
+      - .env
+    environment:
+      - MCP_TRANSPORT=http
+      - MCP_HOST=127.0.0.1
+      - MCP_PORT=8080
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - pinterest_token_data:/home/app/.local/state/pinterest-mcp
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8080/healthz\")'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    profiles:
+      - oauth
 
 volumes:
   pinterest_token_data:
     name: pinterest_token_data
+
