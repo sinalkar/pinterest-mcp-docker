@@ -6,9 +6,11 @@ import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from mcp.server.lowlevel.server import Server
 
-from pinterest_mcp.app import call_tool, list_tools, set_client
+from pinterest_mcp.app import call_tool, get_lowlevel_server, list_tools, mcp_app, set_client
 from pinterest_mcp.client import PinterestClient
+from pinterest_mcp.tools import REGISTRY
 
 
 @pytest.fixture
@@ -26,6 +28,37 @@ async def test_list_tools_count_and_schema():
     names = {t.name for t in tools}
     assert "create_pin" in names
     assert "dry_run_pin" not in names  # dead branch removed
+
+
+@pytest.mark.asyncio
+async def test_list_tools_matches_registry_names():
+    """The MCPServer tool manager must advertise exactly the REGISTRY tools."""
+    tools = await list_tools()
+    assert {t.name for t in tools} == set(REGISTRY)
+
+
+@pytest.mark.asyncio
+async def test_schema_derived_from_model_carries_field_constraints():
+    """Schemas now come from the Pydantic model, not a hand-written dict, so
+    they carry constraints (e.g. maxLength) the old hand-written schema omitted.
+    """
+    tools = await list_tools()
+    create_pin = next(t for t in tools if t.name == "create_pin")
+    assert create_pin.input_schema["properties"]["board_id"]["maxLength"] == 100
+    assert create_pin.input_schema["properties"]["title"]["description"] == "Pin title"
+    assert set(create_pin.input_schema["required"]) == {"board_id", "title"}
+
+
+def test_lowlevel_server_accessor_resolves_to_a_server():
+    """Canary for the SDK's private `MCPServer._lowlevel_server` attribute.
+
+    If a future SDK release renames or removes this attribute, this test
+    fails immediately instead of surfacing as a mysterious runtime error in
+    the HTTP or SSE transport.
+    """
+    lowlevel = get_lowlevel_server()
+    assert isinstance(lowlevel, Server)
+    assert lowlevel is mcp_app._lowlevel_server
 
 
 @pytest.mark.asyncio

@@ -53,3 +53,23 @@ def test_log_records_carry_redaction_markers():
     filter_obj.filter(record)
     assert secret_token not in record.getMessage()
     assert "[REDACTED]" in record.getMessage()
+
+
+def test_readme_configuration_table_covers_all_settings_fields():
+    import re
+    from pathlib import Path
+
+    from pinterest_mcp.config import Settings
+
+    readme_path = Path(__file__).resolve().parent.parent / "README.md"
+    content = readme_path.read_text(encoding="utf-8")
+
+    # Extract all backticked variables from the Environment Variables Reference table
+    env_vars_in_readme = set(re.findall(r"`([A-Z0-9_]+)`", content))
+
+    for field_name, field_info in Settings.model_fields.items():
+        env_alias = field_info.alias or field_name.upper()
+        assert env_alias in env_vars_in_readme, (
+            f"Field {env_alias} missing in README configuration table"
+        )
+

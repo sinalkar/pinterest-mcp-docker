@@ -5,16 +5,17 @@ from __future__ import annotations
 import os
 import sys
 
-from .config import Transport, load_settings_or_exit
+from .config import TRANSPORT_VALUES, Transport, load_settings_or_exit
 from .stdio_main import main as stdio_main
 
 
 def main() -> None:
     raw_transport = os.environ.get("MCP_TRANSPORT", "stdio").lower()
-    if raw_transport not in (Transport.STDIO.value, Transport.HTTP.value):
+    if raw_transport not in TRANSPORT_VALUES:
+        accepted = ", ".join(repr(v) for v in TRANSPORT_VALUES)
         print(
             f"Error: Invalid MCP_TRANSPORT value {raw_transport!r}. "
-            f"Accepted values are: 'stdio', 'http'.",
+            f"Accepted values are: {accepted}.",
             file=sys.stderr,
         )
         sys.exit(2)
@@ -23,7 +24,7 @@ def main() -> None:
 
     if settings.transport is Transport.STDIO:
         stdio_main()
-    elif settings.transport is Transport.HTTP:
+    elif settings.is_http:
         try:
             import uvicorn
         except ImportError:
