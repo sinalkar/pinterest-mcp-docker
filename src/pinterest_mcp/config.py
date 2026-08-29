@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 from pydantic import Field, SecretStr, ValidationError, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # Variables whose *values* must never reach a log or an error message.
 SECRET_ENV_VARS = frozenset(
@@ -98,18 +98,22 @@ class Settings(BaseSettings):
 
     # -- transport security and CORS (design D7) ------------------------
     dns_rebinding_protection: bool = Field(default=True, alias="MCP_DNS_REBINDING_PROTECTION")
-    allowed_hosts: list[str] = Field(default_factory=list, alias="MCP_ALLOWED_HOSTS")
-    allowed_origins: list[str] = Field(default_factory=list, alias="MCP_ALLOWED_ORIGINS")
+    allowed_hosts: Annotated[list[str], NoDecode] = Field(
+        default_factory=list, alias="MCP_ALLOWED_HOSTS"
+    )
+    allowed_origins: Annotated[list[str], NoDecode] = Field(
+        default_factory=list, alias="MCP_ALLOWED_ORIGINS"
+    )
     cors_allow_credentials: bool = Field(default=False, alias="MCP_CORS_ALLOW_CREDENTIALS")
 
     # -- OAuth 2.1 resource-server mode (design D5) ---------------------
     oauth_issuer: str | None = Field(default=None, alias="MCP_OAUTH_ISSUER")
     oauth_jwks_url: str | None = Field(default=None, alias="MCP_OAUTH_JWKS_URL")
     resource_url: str | None = Field(default=None, alias="MCP_RESOURCE_URL")
-    oauth_required_scopes: list[str] = Field(
+    oauth_required_scopes: Annotated[list[str], NoDecode] = Field(
         default_factory=list, alias="MCP_OAUTH_REQUIRED_SCOPES"
     )
-    oauth_allowed_subjects: list[str] = Field(
+    oauth_allowed_subjects: Annotated[list[str], NoDecode] = Field(
         default_factory=list, alias="MCP_OAUTH_ALLOWED_SUBJECTS"
     )
 

@@ -30,6 +30,16 @@ from .event_store import InMemoryEventStore
 logger = logging.getLogger(__name__)
 
 
+class _ASGIEndpoint:
+    """Adapt an ASGI callable for an exact Starlette ``Route``."""
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        await self.app(scope, receive, send)
+
+
 class BearerAuthMiddleware(BaseHTTPMiddleware):
     """Bearer token authorization middleware."""
 
@@ -115,18 +125,30 @@ def create_http_app(settings: Settings | None = None) -> Starlette:
         if is_oauth:
             from mcp.server.auth.middleware.bearer_auth import RequireAuthMiddleware
 
+            streamable_app = RequireAuthMiddleware(
+                session_manager.handle_request,
+                settings.oauth_required_scopes,
+                resource_metadata_url,
+            )
             routes.append(
                 Mount(
                     settings.path,
-                    app=RequireAuthMiddleware(
-                        session_manager.handle_request,
-                        settings.oauth_required_scopes,
-                        resource_metadata_url,
-                    ),
+                    app=streamable_app,
                 )
             )
         else:
-            routes.append(Mount(settings.path, app=session_manager.handle_request))
+            streamable_app = session_manager.handle_request
+
+        routes.insert(
+            0,
+            Route(
+                settings.path,
+                endpoint=_ASGIEndpoint(streamable_app),
+                methods=["GET", "POST", "DELETE"],
+            ),
+        )
+        if not is_oauth:
+            routes.append(Mount(settings.path, app=streamable_app))
 
     if settings.transport in (Transport.SSE, Transport.HTTP_SSE):
         surfaces["sse"] = settings.sse_path

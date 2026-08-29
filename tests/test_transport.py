@@ -138,6 +138,38 @@ def test_healthz_endpoint_returns_200_no_secrets():
         assert "token" not in res.text.lower()
 
 
+def test_canonical_mcp_path_does_not_redirect():
+    settings = Settings(
+        MCP_TRANSPORT=Transport.HTTP,
+        MCP_HOST="127.0.0.1",
+        MCP_AUTH_TOKEN="test-token",
+        MCP_JSON_RESPONSE=True,
+    )
+    with TestClient(
+        create_http_app(settings),
+        base_url="http://127.0.0.1:8080",
+        follow_redirects=False,
+    ) as client:
+        response = client.post(
+            "/mcp",
+            headers={
+                "Authorization": "Bearer test-token",
+                "Accept": "application/json, text/event-stream",
+            },
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-03-26",
+                    "capabilities": {},
+                    "clientInfo": {"name": "test", "version": "1.0"},
+                },
+            },
+        )
+    assert response.status_code == 200
+
+
 def test_readyz_requires_usable_pinterest_credentials(tmp_path):
     unconfigured = Settings(
         MCP_TRANSPORT=Transport.HTTP,

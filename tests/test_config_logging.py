@@ -17,6 +17,17 @@ def test_invalid_mcp_port_aborts_and_names_variable():
     assert "MCP_PORT" in err_msg
 
 
+def test_comma_separated_list_settings_load_from_environment_shape():
+    settings = load_settings(
+        {
+            "MCP_ALLOWED_HOSTS": "127.0.0.1:8080,localhost:8080",
+            "MCP_OAUTH_REQUIRED_SCOPES": "read:boards,write:pins",
+        }
+    )
+    assert settings.allowed_hosts == ["127.0.0.1:8080", "localhost:8080"]
+    assert settings.oauth_required_scopes == ["read:boards", "write:pins"]
+
+
 def test_secret_validation_failure_names_variable_without_leaking_secret():
     secret_val = "super_secret_token_123456789"
     with pytest.raises(ConfigError) as exc_info:

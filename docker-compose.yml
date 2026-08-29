@@ -18,6 +18,7 @@ services:
       - MCP_TRANSPORT=http
       - MCP_HOST=0.0.0.0
       - MCP_PORT=8080
+      - MCP_ALLOWED_HOSTS=${MCP_ALLOWED_HOSTS:-127.0.0.1:8080,localhost:8080}
     ports:
       - "127.0.0.1:8080:8080"
     volumes:
@@ -78,6 +79,7 @@ services:
       - MCP_TRANSPORT=http
       - MCP_HOST=0.0.0.0
       - MCP_PORT=8080
+      - MCP_ALLOWED_HOSTS=${MCP_ALLOWED_HOSTS:-127.0.0.1:8080,localhost:8080}
       - MCP_JSON_RESPONSE=true
     ports:
       - "127.0.0.1:8080:8080"
@@ -113,6 +115,7 @@ services:
       - MCP_TRANSPORT=http
       - MCP_HOST=0.0.0.0
       - MCP_PORT=8080
+      - MCP_ALLOWED_HOSTS=${MCP_ALLOWED_HOSTS:-127.0.0.1:8080,localhost:8080}
       - MCP_STATELESS=true
       - MCP_JSON_RESPONSE=true
     ports:
@@ -149,6 +152,7 @@ services:
       - MCP_TRANSPORT=http+sse
       - MCP_HOST=0.0.0.0
       - MCP_PORT=8080
+      - MCP_ALLOWED_HOSTS=${MCP_ALLOWED_HOSTS:-127.0.0.1:8080,localhost:8080}
     ports:
       - "127.0.0.1:8080:8080"
     volumes:
@@ -183,6 +187,7 @@ services:
       - MCP_TRANSPORT=http
       - MCP_HOST=0.0.0.0
       - MCP_PORT=8080
+      - MCP_ALLOWED_HOSTS=${MCP_ALLOWED_HOSTS:-127.0.0.1:8080,localhost:8080}
     ports:
       - "127.0.0.1:8080:8080"
     volumes:
