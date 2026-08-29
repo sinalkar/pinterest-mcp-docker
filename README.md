@@ -1,8 +1,8 @@
 # 📌 Pinterest MCP Server Docker (`pinterest-mcp-docker`)
 
-[![CI](https://github.com/sinalkar/pinterest-mcp-docker/actions/workflows/ci.yml/badge.svg)](https://github.com/sinalkar/pinterest-mcp-docker/actions/workflows/ci.yml)
+[![CI](https://github.com/sinalkar/pinterest-mcp-docker/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/sinalkar/pinterest-mcp-docker/actions/workflows/ci.yml?query=branch%3Amain)
 [![Security](https://github.com/sinalkar/pinterest-mcp-docker/actions/workflows/security.yml/badge.svg)](https://github.com/sinalkar/pinterest-mcp-docker/actions/workflows/security.yml)
-[![Docker Image](https://img.shields.io/docker/v/sinalkar/pinterest-mcp-docker?label=Docker%20Hub)](https://hub.docker.com/r/sinalkar/pinterest-mcp-docker)
+[![Docker Hub](https://img.shields.io/docker/pulls/sinalkar/pinterest-mcp-docker?label=Docker%20Hub)](https://hub.docker.com/r/sinalkar/pinterest-mcp-docker)
 [![PyPI](https://img.shields.io/pypi/v/pinterest-mcp-docker)](https://pypi.org/project/pinterest-mcp-docker/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -113,6 +113,8 @@ You can run `pinterest-mcp-docker` using **Docker** (recommended) or **Native Py
 ### Option A: Running via Docker (Recommended)
 
 Docker provides an isolated, read-only environment without requiring Python setup.
+
+Published Docker Hub images are available at [sinalkar/pinterest-mcp-docker](https://hub.docker.com/r/sinalkar/pinterest-mcp-docker). Pull the current release with `docker pull sinalkar/pinterest-mcp-docker:latest`.
 
 #### Volume Mapping Overview
 - 💾 **Token Persistence Volume:** Saves OAuth access and refresh tokens across container restarts. Map a named volume or host directory to `/home/app/.local/state/pinterest-mcp`.
