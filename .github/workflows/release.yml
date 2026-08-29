@@ -47,16 +47,14 @@ jobs:
     runs-on: ubuntu-latest
     environment: release
     steps:
-      - name: Verify Docker Hub & PyPI Credentials
+      - name: Verify Docker Hub Credentials
         env:
           DH_USER: ${{ secrets.DOCKER_USERNAME || secrets.DOCKERHUB_USERNAME || 'sinalkar' }}
           DH_TOKEN: ${{ secrets.DOCKER_TOKEN || secrets.DOCKERHUB_TOKEN }}
-          PYPI_TOKEN: ${{ secrets.PYTHON_PUBLISH_TOKEN }}
         run: |
           MISSING=""
           if [ -z "$DH_USER" ]; then MISSING="$MISSING DOCKER_USERNAME/DOCKERHUB_USERNAME"; fi
           if [ -z "$DH_TOKEN" ]; then MISSING="$MISSING DOCKER_TOKEN/DOCKERHUB_TOKEN"; fi
-          if [ -z "$PYPI_TOKEN" ]; then MISSING="$MISSING PYTHON_PUBLISH_TOKEN"; fi
           if [ -n "$MISSING" ]; then
             echo "Error: Missing required release credentials:$MISSING" >&2
             exit 1
@@ -124,6 +122,8 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
+          provenance: true
+          sbom: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
@@ -179,8 +179,6 @@ jobs:
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          password: ${{ secrets.PYTHON_PUBLISH_TOKEN }}
 
   github-release:
     name: Create GitHub Release

@@ -28,11 +28,13 @@ class JWTTokenVerifier:
         jwks_url: str | None = None,
         algorithms: list[str] | None = None,
         jwk_client: PyJWKClient | None = None,
+        allowed_subjects: list[str] | None = None,
     ) -> None:
         self.issuer = issuer
         self.resource_url = resource_url
         self.jwks_url = jwks_url or f"{issuer.rstrip('/')}/.well-known/jwks.json"
         self.algorithms = algorithms or DEFAULT_ALGORITHMS
+        self.allowed_subjects = set(allowed_subjects or [])
         self._jwk_client = jwk_client or PyJWKClient(
             self.jwks_url,
             cache_keys=True,
@@ -56,6 +58,10 @@ class JWTTokenVerifier:
                 audience=self.resource_url,
                 options=options,
             )
+            subject = payload.get("sub")
+            if self.allowed_subjects and subject not in self.allowed_subjects:
+                logger.debug("Token subject is not allowed")
+                return None
 
             raw_scope = payload.get("scope") or payload.get("scopes") or payload.get("scp") or []
             if isinstance(raw_scope, str):
@@ -86,7 +92,7 @@ class JWTTokenVerifier:
                 scopes=scopes,
                 expires_at=payload.get("exp"),
                 resource=resource,
-                subject=str(payload.get("sub")) if payload.get("sub") else None,
+                subject=str(subject) if subject else None,
                 claims=payload,
             )
         except jwt.PyJWTError as err:

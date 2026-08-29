@@ -7,7 +7,7 @@ import contextlib
 import signal
 import sys
 
-from .app import _client, mcp_app
+from .app import close_client, mcp_app
 
 
 async def run_stdio_server() -> None:
@@ -25,16 +25,16 @@ async def run_stdio_server() -> None:
     server_task = asyncio.create_task(mcp_app.run_stdio_async())
     stop_task = asyncio.create_task(stop_event.wait())
 
-    _done, pending = await asyncio.wait(
-        [server_task, stop_task],
-        return_when=asyncio.FIRST_COMPLETED,
-    )
-
-    for task in pending:
-        task.cancel()
-
-    if _client is not None:
-        await _client.aclose()
+    try:
+        _done, pending = await asyncio.wait(
+            [server_task, stop_task],
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+    finally:
+        await close_client()
 
 
 def main() -> None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from unittest.mock import AsyncMock
 
 import pytest
 from mcp import ClientSession
@@ -137,6 +138,42 @@ def test_healthz_endpoint_returns_200_no_secrets():
         assert "token" not in res.text.lower()
 
 
+def test_readyz_requires_usable_pinterest_credentials(tmp_path):
+    unconfigured = Settings(
+        MCP_TRANSPORT=Transport.HTTP,
+        MCP_HOST="127.0.0.1",
+        PINTEREST_TOKEN_PATH=tmp_path / "missing-token.json",
+    )
+    with TestClient(create_http_app(unconfigured)) as client:
+        response = client.get("/readyz")
+    assert response.status_code == 503
+    assert response.json() == {"status": "not_ready"}
+
+    configured = Settings(
+        MCP_TRANSPORT=Transport.HTTP,
+        MCP_HOST="127.0.0.1",
+        PINTEREST_ACCESS_TOKEN="configured-access-token",
+        PINTEREST_TOKEN_PATH=tmp_path / "missing-token.json",
+    )
+    with TestClient(create_http_app(configured)) as client:
+        response = client.get("/readyz")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready"}
+
+
+def test_http_lifespan_closes_and_clears_shared_client(tmp_path):
+    shared_client = AsyncMock()
+    set_client(shared_client)
+    settings = Settings(
+        MCP_TRANSPORT=Transport.HTTP,
+        MCP_HOST="127.0.0.1",
+        PINTEREST_TOKEN_PATH=tmp_path / "missing-token.json",
+    )
+    with TestClient(create_http_app(settings)):
+        pass
+    shared_client.aclose.assert_awaited_once()
+
+
 def test_missing_or_wrong_bearer_token_returns_401():
     settings = Settings(
         MCP_TRANSPORT=Transport.HTTP,
@@ -212,17 +249,17 @@ async def test_wire_protocol_end_to_end_over_memory_transport():
                 tools_result = await session.list_tools()
                 assert {t.name for t in tools_result.tools} == set(REGISTRY)
 
-                # Unknown tool: sanitized error in the content body, not a
-                # protocol-level `isError` failure.
+                # Unknown tool: sanitized error in the content body with the
+                # standard protocol-level `isError` signal.
                 result = await session.call_tool("nonexistent_tool", {})
-                assert result.is_error is False
+                assert result.is_error is True
                 assert "Unknown or unadvertised tool" in result.content[0].text
 
-                # Invalid arguments: same sanitized shape.
+                # Invalid arguments: same sanitized error shape and signal.
                 result = await session.call_tool(
                     "list_boards", {"privacy": "ALL", "unknown_arg": "x"}
                 )
-                assert result.is_error is False
+                assert result.is_error is True
                 assert "security_error" in result.content[0].text
         finally:
             server_task.cancel()

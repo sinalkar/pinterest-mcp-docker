@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import stat
 import time
@@ -15,6 +16,38 @@ import respx
 from pinterest_mcp.client import PinterestClient
 from pinterest_mcp.config import Settings
 from pinterest_mcp.security import SecurityError, fetch_public_image_url
+
+
+@pytest.mark.asyncio
+async def test_direct_access_token_is_usable_without_expiry(tmp_path: Path):
+    client = PinterestClient(
+        access_token="direct-token",
+        refresh_token="refresh-token",
+        settings=Settings(PINTEREST_TOKEN_PATH=tmp_path / "token.json"),
+    )
+    try:
+        assert await client._ensure_token() == "direct-token"
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_token_refresh_happens_once(tmp_path: Path):
+    client = PinterestClient(
+        refresh_token="refresh-token",
+        settings=Settings(PINTEREST_TOKEN_PATH=tmp_path / "token.json"),
+    )
+    try:
+        with respx.mock(assert_all_called=True) as respx_mock:
+            refresh = respx_mock.post("https://api.pinterest.com/v5/oauth/token").respond(
+                json={"access_token": "new-token", "expires_in": 3600}
+            )
+            tokens = await asyncio.gather(*[client._ensure_token() for _ in range(5)])
+
+        assert tokens == ["new-token"] * 5
+        assert refresh.call_count == 1
+    finally:
+        await client.aclose()
 
 
 @pytest.mark.asyncio

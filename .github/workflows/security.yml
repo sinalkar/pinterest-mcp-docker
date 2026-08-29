@@ -57,14 +57,13 @@ jobs:
           pip install bandit pip-audit
 
       - name: Run Bandit
-        run: bandit -r src/ -f json -o bandit-results.json || true
+        run: bandit -r src/ -f json -o bandit-results.json
 
       - name: Run pip-audit
-        run: pip-audit || true
+        run: pip-audit
 
       - name: Run Dependency Review (PR only)
         if: github.event_name == 'pull_request'
-        continue-on-error: true
         uses: actions/dependency-review-action@v4
 
       - name: Run Trivy Filesystem Scan (SARIF Report)

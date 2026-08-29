@@ -47,6 +47,20 @@ def set_client(client: PinterestClient | None) -> None:
     _client = client
 
 
+async def close_client() -> None:
+    """Close and forget the process-wide Pinterest client, if it exists.
+
+    A server instance can be started and stopped more than once in a test
+    process (and application lifespan shutdown is expected to be restartable).
+    Clearing the reference before awaiting close prevents a later startup from
+    reusing a closed ``httpx.AsyncClient``.
+    """
+    global _client
+    client, _client = _client, None
+    if client is not None:
+        await client.aclose()
+
+
 def _placeholder_tool_fn(spec: ToolSpec) -> Any:
     """Build a flattened-signature callable so `MCPServer.add_tool` can derive
     a real advertised schema from the tool's Pydantic model.
@@ -82,6 +96,12 @@ for _spec in REGISTRY.values():
         _placeholder_tool_fn(_spec),
         name=_spec.name,
         description=_spec.description,
+        annotations=types.ToolAnnotations(
+            read_only_hint=_spec.read_only,
+            destructive_hint=_spec.destructive,
+            idempotent_hint=_spec.idempotent,
+            open_world_hint=_spec.open_world,
+        ),
         structured_output=False,
     )
 del _spec
@@ -136,16 +156,24 @@ async def _handle_call_tool(ctx: Any, params: types.CallToolRequestParams) -> ty
     content=[...])` carrying the raw exception message. That both changes the
     wire shape (`isError` was never set before this migration) and risks an
     unsanitized message reaching the client. Overriding this handler keeps
-    `call_tool()`'s validate -> dispatch -> `sanitize_error` path — including
-    its non-`isError` JSON-body-on-failure shape — as the only way a tool call
-    is ever executed, on every transport, unchanged by this migration.
+    `call_tool()`'s validate -> dispatch -> `sanitize_error` path as the only
+    way a tool call is executed on every transport. Failures retain their safe
+    JSON body and also set the standard `isError` result flag.
 
     `tools/list` is intentionally left on the SDK's default handler: it is
     backed by the same `_tool_manager` populated via `add_tool` below, so it
     already reflects the schema `list_tools()` derives, with no dispatch risk.
     """
     content = await call_tool(params.name, params.arguments or {})
-    return types.CallToolResult(content=content)
+    # All failures are encoded by ``sanitize_error`` as a JSON object with a
+    # category.  Preserve the safe JSON body while setting the MCP-standard
+    # signal clients use to distinguish an unsuccessful tool invocation.
+    try:
+        payload = json.loads(content[0].text)
+        is_error = isinstance(payload, dict) and "category" in payload
+    except (json.JSONDecodeError, IndexError):
+        is_error = False
+    return types.CallToolResult(content=content, is_error=is_error)
 
 
 get_lowlevel_server().add_request_handler(

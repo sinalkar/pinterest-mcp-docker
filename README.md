@@ -23,15 +23,15 @@ With `pinterest-mcp-docker`, AI agents can autonomously manage Pinterest boards,
 | -------- | --------- | ----------- |
 | 📌 **Pins** | `create_pin` | Create a single Pinterest pin (via image URL or local image path) |
 | 📌 **Pins** | `bulk_create_pins` | Batch create up to 50 pins in a single call |
-| 📌 **Pins** | `get_pin` | Retrieve detailed metadata for a specific pin ID |
+| 📌 **Pins** | `update_pin` | Update a pin's metadata |
 | 📌 **Pins** | `delete_pin` | Delete a pin by ID |
 | 📋 **Boards** | `list_boards` | List all Pinterest boards in the user's account |
 | 📋 **Boards** | `create_board` | Create a new Pinterest board with privacy controls |
-| 📋 **Boards** | `get_board` | Get details and metadata for a specific board ID |
-| 📋 **Boards** | `delete_board` | Delete a board by ID |
+| 📋 **Boards** | `get_board_pins` | List pins on a board |
 | 🔍 **Search** | `search_pins` | Search Pinterest pins by keyword query |
 | 📊 **Analytics** | `get_pin_analytics` | Retrieve impressions, saves, clicks, and engagement metrics |
-| 👤 **User Profile** | `get_user_account` | Get authenticated user profile details |
+| 📊 **Analytics** | `get_account_analytics` | Retrieve account-level analytics |
+| 🔎 **Trends** | `get_trending` | Retrieve Pinterest trend data |
 
 ### 🔒 Enterprise Security Features
 
@@ -177,8 +177,8 @@ docker run -d --name pinterest-mcp \
 
 Verify health:
 ```bash
-curl http://localhost:8080/healthz
-# Output: {"status":"ok","version":"0.2.0","transport":"http"}
+curl http://localhost:8080/readyz
+# Output: {"status":"ready","version":"<installed package version>","transport":"http"}
 ```
 
 ---
@@ -324,13 +324,13 @@ Locate your Claude Desktop config file:
 
 | Client Family | Transport | Default Endpoint | Supported Auth | Status | Example Config / Notes |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Claude Desktop** | `stdio` | `stdio` | Environment variables | ✅ Verified | Command: `docker` or `pinterest-mcp` |
-| **Cursor** | `http` | `/mcp` | Bearer Token / None | ✅ Verified | `{"url": "http://localhost:8080/mcp", "headers": {"Authorization": "Bearer <token>"}}` |
-| **VS Code (Roo/Cline)**| `http` / `stdio`| `/mcp` | Bearer / None | ✅ Verified | Direct SSE or Streamable HTTP endpoint |
-| **Windsurf** | `stdio` / `http` | `/mcp` | Bearer / None | ✅ Verified | Standard stdio command or HTTP endpoint |
-| **Claude Web Connectors**| `http` | `/mcp` | OAuth 2.1 / Bearer | ✅ Verified | Set `MCP_OAUTH_ISSUER` & `MCP_RESOURCE_URL` |
-| **ChatGPT Connectors** | `http` (JSON) | `/mcp` | OAuth 2.1 / Bearer | ✅ Verified | Set `MCP_JSON_RESPONSE=true` |
-| **Legacy SSE Clients** | `sse` / `http+sse` | `/sse` | Bearer / None | ✅ Verified | SSE stream at `/sse`, messages post to `/messages/` |
+| **Claude Desktop** | `stdio` | `stdio` | Environment variables | Implementation complete; desktop smoke test pending | Command: `docker` or `pinterest-mcp` |
+| **Cursor** | `http` | `/mcp` | Bearer Token / None | Automated handshake covered; client smoke test pending | `{"url": "http://localhost:8080/mcp", "headers": {"Authorization": "Bearer <token>"}}` |
+| **VS Code (Roo/Cline)**| `http` / `stdio`| `/mcp` | Bearer / None | Client smoke test pending | Direct SSE or Streamable HTTP endpoint |
+| **Windsurf** | `stdio` / `http` | `/mcp` | Bearer / None | Client smoke test pending | Standard stdio command or HTTP endpoint |
+| **Claude Web Connectors**| `http` | `/mcp` | OAuth 2.1 / Bearer | Server-side support complete; hosted smoke test pending | Set `MCP_OAUTH_ISSUER` & `MCP_RESOURCE_URL` |
+| **ChatGPT Connectors** | `http` (JSON) | `/mcp` | OAuth 2.1 / Bearer | Server-side support complete; hosted smoke test pending | Set `MCP_JSON_RESPONSE=true` |
+| **Legacy SSE Clients** | `sse` / `http+sse` | `/sse` | Bearer / None | Automated route/auth coverage; client smoke test pending | SSE stream at `/sse`, messages post to `/messages/` |
 
 ---
 
@@ -442,6 +442,7 @@ For clients requiring the 2024-11-05 HTTP+SSE transport:
 | `MCP_OAUTH_JWKS_URL` | Explicit JWKS endpoint URL for OAuth | No | None | No |
 | `MCP_RESOURCE_URL` | Canonical resource server identifier URL | No | None | No |
 | `MCP_OAUTH_REQUIRED_SCOPES` | Comma-separated OAuth required scopes | No | None | No |
+| `MCP_OAUTH_ALLOWED_SUBJECTS` | Comma-separated JWT subjects permitted to use this single-account server | No | None (allow all valid subjects) | No |
 | `LOG_LEVEL` | Logging level (`CRITICAL`, `ERROR`, `WARNING`, `INFO`, `DEBUG`) | No | `INFO` | No |
 | `LOG_FORMAT` | Log format (`text` or `json`) | No | `text` | No |
 | `PINTEREST_CLIENT_ID` | Pinterest API v5 App Client ID | **Yes** | None | **Yes** |
@@ -480,7 +481,7 @@ For clients requiring the 2024-11-05 HTTP+SSE transport:
 | Tag | Type | Description |
 | --- | ---- | ----------- |
 | `latest` | Moving | Points to the latest production release |
-| `0.2.0`, `0.2`, `0` | SemVer | Automatically updated for patch and minor updates |
+| `<major>.<minor>.<patch>`, `<major>.<minor>`, `<major>` | SemVer | Automatically updated for patch and minor updates |
 | `sha-<short>` | Immutable | Exact git commit build tag |
 
 ### Verifying Image Signatures
@@ -509,4 +510,3 @@ See [NOTICE.md](NOTICE.md) for full licensing details and modifications summary.
 
 > [!NOTE]
 > **Disclaimer:** This is an unofficial Model Context Protocol (MCP) server and is not affiliated with, endorsed by, or sponsored by Pinterest, Inc.
-

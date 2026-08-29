@@ -46,6 +46,6 @@ VOLUME ["/home/app/.local/state/pinterest-mcp"]
 USER 10001
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD ["python3", "-c", "import os, urllib.request, sys; sys.exit(0 if os.environ.get('MCP_TRANSPORT', 'stdio') == 'stdio' else (0 if urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"MCP_PORT\", 8080)}/healthz').getcode() == 200 else 1))"]
+  CMD ["python3", "-c", "import os, urllib.request, sys; sys.exit(0 if os.environ.get('MCP_TRANSPORT', 'stdio') == 'stdio' else (0 if urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"MCP_PORT\", 8080)}/readyz').getcode() == 200 else 1))"]
 
 ENTRYPOINT ["pinterest-mcp"]

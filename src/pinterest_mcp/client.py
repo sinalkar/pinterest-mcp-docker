@@ -80,7 +80,11 @@ class PinterestClient:
             )
             or os.environ.get("PINTEREST_REFRESH_TOKEN")
         )
-        self._token_expiry: float = 0
+        # Tokens supplied directly (constructor, settings, or environment) often
+        # have no expiry metadata. They remain usable until the API rejects them.
+        # A value loaded from disk always has an explicit expiry (or zero).
+        self._token_expiry: float | None = None
+        self._refresh_lock = asyncio.Lock()
         self._pin_timestamps: list[float] = []
 
         timeout_cfg = httpx.Timeout(
@@ -133,29 +137,41 @@ class PinterestClient:
         )
 
     async def _ensure_token(self) -> str:
-        if self._access_token and time.time() < self._token_expiry - 60:
+        if self._access_token and (
+            self._token_expiry is None or time.time() < self._token_expiry - 60
+        ):
             return self._access_token
         if self._refresh_token:
             await self._refresh()
-            return self._access_token  # type: ignore[return-value]
+            if self._access_token:
+                return self._access_token
         raise RuntimeError("No Pinterest access token. Run `pinterest-mcp-auth` to authenticate.")
 
     async def _refresh(self) -> None:
-        resp = await self._http.post(
-            PINTEREST_AUTH,
-            data={
-                "grant_type": "refresh_token",
-                "refresh_token": self._refresh_token,
-            },
-            auth=(self.client_id, self.client_secret),
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        self._access_token = data["access_token"]
-        self._refresh_token = data.get("refresh_token", self._refresh_token)
-        self._token_expiry = time.time() + data.get("expires_in", 3600)
-        self._save_token_file()
-        logger.info("Pinterest token refreshed")
+        async with self._refresh_lock:
+            # Another concurrent request may have refreshed while this request
+            # waited for the lock.
+            if (
+                self._access_token
+                and self._token_expiry is not None
+                and time.time() < self._token_expiry - 60
+            ):
+                return
+            resp = await self._http.post(
+                PINTEREST_AUTH,
+                data={
+                    "grant_type": "refresh_token",
+                    "refresh_token": self._refresh_token,
+                },
+                auth=(self.client_id, self.client_secret),
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            self._access_token = data["access_token"]
+            self._refresh_token = data.get("refresh_token", self._refresh_token)
+            self._token_expiry = time.time() + data.get("expires_in", 3600)
+            self._save_token_file()
+            logger.info("Pinterest token refreshed")
 
     async def _request(
         self,

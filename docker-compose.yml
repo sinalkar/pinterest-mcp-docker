@@ -16,7 +16,7 @@ services:
       - .env
     environment:
       - MCP_TRANSPORT=http
-      - MCP_HOST=127.0.0.1
+      - MCP_HOST=0.0.0.0
       - MCP_PORT=8080
     ports:
       - "127.0.0.1:8080:8080"
@@ -25,7 +25,7 @@ services:
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=64m
     healthcheck:
-      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8080/healthz\")'"]
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8080/readyz\")'"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -76,7 +76,7 @@ services:
       - .env
     environment:
       - MCP_TRANSPORT=http
-      - MCP_HOST=127.0.0.1
+      - MCP_HOST=0.0.0.0
       - MCP_PORT=8080
       - MCP_JSON_RESPONSE=true
     ports:
@@ -86,7 +86,7 @@ services:
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=64m
     healthcheck:
-      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8080/healthz\")'"]
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8080/readyz\")'"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -111,7 +111,7 @@ services:
       - .env
     environment:
       - MCP_TRANSPORT=http
-      - MCP_HOST=127.0.0.1
+      - MCP_HOST=0.0.0.0
       - MCP_PORT=8080
       - MCP_STATELESS=true
       - MCP_JSON_RESPONSE=true
@@ -122,7 +122,7 @@ services:
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=64m
     healthcheck:
-      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8080/healthz\")'"]
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8080/readyz\")'"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -147,7 +147,7 @@ services:
       - .env
     environment:
       - MCP_TRANSPORT=http+sse
-      - MCP_HOST=127.0.0.1
+      - MCP_HOST=0.0.0.0
       - MCP_PORT=8080
     ports:
       - "127.0.0.1:8080:8080"
@@ -156,7 +156,7 @@ services:
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=64m
     healthcheck:
-      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8080/healthz\")'"]
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8080/readyz\")'"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -181,7 +181,7 @@ services:
       - .env
     environment:
       - MCP_TRANSPORT=http
-      - MCP_HOST=127.0.0.1
+      - MCP_HOST=0.0.0.0
       - MCP_PORT=8080
     ports:
       - "127.0.0.1:8080:8080"
@@ -190,7 +190,7 @@ services:
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=64m
     healthcheck:
-      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8080/healthz\")'"]
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8080/readyz\")'"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -201,4 +201,3 @@ services:
 volumes:
   pinterest_token_data:
     name: pinterest_token_data
-

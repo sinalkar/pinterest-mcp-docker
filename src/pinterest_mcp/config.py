@@ -109,6 +109,9 @@ class Settings(BaseSettings):
     oauth_required_scopes: list[str] = Field(
         default_factory=list, alias="MCP_OAUTH_REQUIRED_SCOPES"
     )
+    oauth_allowed_subjects: list[str] = Field(
+        default_factory=list, alias="MCP_OAUTH_ALLOWED_SUBJECTS"
+    )
 
     # -- logging -------------------------------------------------------
     log_level: Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"] = Field(
@@ -154,7 +157,13 @@ class Settings(BaseSettings):
             raise ValueError("must start with '/'")
         return v
 
-    @field_validator("allowed_hosts", "allowed_origins", "oauth_required_scopes", mode="before")
+    @field_validator(
+        "allowed_hosts",
+        "allowed_origins",
+        "oauth_required_scopes",
+        "oauth_allowed_subjects",
+        mode="before",
+    )
     @classmethod
     def _split_csv(cls, v: str | list[str] | None) -> list[str] | None:
         """Accept a comma-separated string from the environment.
@@ -284,6 +293,34 @@ class Settings(BaseSettings):
         if self.transport is Transport.STDIO:
             return True
         return self.allow_local_paths
+
+    @property
+    def pinterest_credentials_ready(self) -> bool:
+        """Whether the server has a credential source it can use for Pinterest.
+
+        This deliberately validates configuration only; readiness must not make
+        a network call to Pinterest or expose a credential value.  A saved token
+        file is accepted only when it contains a non-empty access token, or a
+        refresh token together with the client credentials needed to exchange it.
+        """
+        access_token = self.access_token.get_secret_value() if self.access_token else ""
+        refresh_token = self.refresh_token.get_secret_value() if self.refresh_token else ""
+        client_id = self.client_id.get_secret_value() if self.client_id else ""
+        client_secret = self.client_secret.get_secret_value() if self.client_secret else ""
+
+        if access_token or (refresh_token and client_id and client_secret):
+            return True
+        if not self.token_path.is_file():
+            return False
+        try:
+            import json
+
+            saved = json.loads(self.token_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return False
+        return bool(saved.get("access_token")) or bool(
+            saved.get("refresh_token") and client_id and client_secret
+        )
 
 
 def _describe(err: ValidationError) -> str:

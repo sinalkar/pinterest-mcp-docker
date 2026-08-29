@@ -7,14 +7,14 @@ Run once to get your access + refresh tokens:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import secrets
 import time
 import webbrowser
-from urllib.parse import urlencode
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 import httpx
-from aiohttp import web  # type: ignore[import]
 
 from .config import load_settings
 from .security import save_atomic_token_file
@@ -23,28 +23,89 @@ PINTEREST_AUTH_URL = "https://www.pinterest.com/oauth/"
 PINTEREST_TOKEN_URL = "https://api.pinterest.com/v5/oauth/token"  # nosec B105 # noqa: S105
 REDIRECT_URI = "http://localhost:8089/callback"
 SCOPES = "boards:read,boards:write,pins:read,pins:write,user_accounts:read"
+CALLBACK_TIMEOUT_SECONDS = 300.0
+_MAX_CALLBACK_REQUEST_LINE = 8 * 1024
 
 
-async def _run_local_server() -> str:
-    """Run a minimal local server to receive the OAuth callback."""
-    code_future: asyncio.Future[str] = asyncio.get_event_loop().create_future()
+def _process_callback_request(
+    request_line: bytes, expected_state: str, code_future: asyncio.Future[str]
+) -> tuple[int, str]:
+    """Validate one callback request line without exposing its credentials."""
+    if len(request_line) > _MAX_CALLBACK_REQUEST_LINE:
+        return 400, "Invalid callback request."
+    try:
+        method, target, _version = request_line.decode("ascii").rstrip("\r\n").split(" ", 2)
+        parsed = urlsplit(target)
+    except (UnicodeDecodeError, ValueError):
+        return 400, "Invalid callback request."
 
-    async def callback(request: web.Request) -> web.Response:
-        code = request.query.get("code")
-        if code:
-            code_future.set_result(code)
-            return web.Response(text="✅ Authorized! You can close this window.")
-        return web.Response(text="❌ No code in callback.", status=400)
+    if method != "GET" or parsed.path != "/callback":
+        return 404, "Not found."
 
-    app = web.Application()
-    app.router.add_get("/callback", callback)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, "localhost", 8089)
-    await site.start()
-    code = await code_future
-    await runner.cleanup()
-    return code
+    query = parse_qs(parsed.query)
+    code = query.get("code", [None])[0]
+    received_state = query.get("state", [None])[0]
+    if not code:
+        return 400, "No authorization code in callback."
+    if not isinstance(received_state, str) or not secrets.compare_digest(
+        received_state, expected_state
+    ):
+        return 400, "Invalid OAuth state. Please restart authorization."
+    if code_future.done():
+        return 400, "Authorization is already complete."
+    code_future.set_result(code)
+    return 200, "Authorized. You can close this window."
+
+
+async def _run_local_server(
+    expected_state: str,
+    *,
+    timeout: float = CALLBACK_TIMEOUT_SECONDS,
+    host: str = "localhost",
+    port: int = 8089,
+) -> str:
+    """Receive one OAuth callback on loopback and return its authorization code."""
+    loop = asyncio.get_running_loop()
+    code_future: asyncio.Future[str] = loop.create_future()
+
+    async def respond(writer: asyncio.StreamWriter, status: int, body: str) -> None:
+        encoded_body = body.encode("utf-8")
+        reason = {200: "OK", 400: "Bad Request", 404: "Not Found"}[status]
+        writer.write(
+            (
+                f"HTTP/1.1 {status} {reason}\r\n"
+                "Content-Type: text/plain; charset=utf-8\r\n"
+                f"Content-Length: {len(encoded_body)}\r\n"
+                "Connection: close\r\n\r\n"
+            ).encode("ascii")
+            + encoded_body
+        )
+        await writer.drain()
+
+    async def callback(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        try:
+            request_line = await asyncio.wait_for(reader.readline(), timeout=5.0)
+            status, body = _process_callback_request(request_line, expected_state, code_future)
+            await respond(writer, status, body)
+        except (ConnectionError, TimeoutError):
+            # A malformed or abandoned browser connection must not end the auth flow.
+            return
+        finally:
+            writer.close()
+            with contextlib.suppress(ConnectionError):
+                await writer.wait_closed()
+
+    server = await asyncio.start_server(callback, host, port)
+    try:
+        try:
+            return await asyncio.wait_for(code_future, timeout=timeout)
+        except TimeoutError as exc:
+            raise RuntimeError(
+                "Timed out waiting for OAuth callback. Please restart authorization."
+            ) from exc
+    finally:
+        server.close()
+        await server.wait_closed()
 
 
 def run_auth_flow() -> None:
@@ -74,7 +135,7 @@ def run_auth_flow() -> None:
     webbrowser.open(auth_url)
 
     async def _exchange() -> None:
-        code = await _run_local_server()
+        code = await _run_local_server(state)
         async with httpx.AsyncClient(verify=True) as http:
             resp = await http.post(
                 PINTEREST_TOKEN_URL,

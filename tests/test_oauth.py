@@ -66,6 +66,14 @@ async def test_jwt_token_verifier_valid_and_invalid_tokens(rsa_key_pair):
     assert access_token.client_id == "test-client-id"
     assert "read:boards" in access_token.scopes
 
+    restricted_verifier = JWTTokenVerifier(
+        issuer="https://auth.example.com",
+        resource_url="https://mcp.example.com",
+        jwk_client=mock_jwk_client,
+        allowed_subjects=["another-user"],
+    )
+    assert await restricted_verifier.verify_token(valid_tok) is None
+
     # Expired token
     expired_tok = generate_test_token(rsa_key_pair, expires_in=-100)
     access_token_exp = await verifier.verify_token(expired_tok)

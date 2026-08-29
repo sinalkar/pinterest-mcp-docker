@@ -6,9 +6,17 @@ import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from mcp import types
 from mcp.server.lowlevel.server import Server
 
-from pinterest_mcp.app import call_tool, get_lowlevel_server, list_tools, mcp_app, set_client
+from pinterest_mcp.app import (
+    _handle_call_tool,
+    call_tool,
+    get_lowlevel_server,
+    list_tools,
+    mcp_app,
+    set_client,
+)
 from pinterest_mcp.client import PinterestClient
 from pinterest_mcp.tools import REGISTRY
 
@@ -35,6 +43,11 @@ async def test_list_tools_matches_registry_names():
     """The MCPServer tool manager must advertise exactly the REGISTRY tools."""
     tools = await list_tools()
     assert {t.name for t in tools} == set(REGISTRY)
+    create_pin = next(tool for tool in tools if tool.name == "create_pin")
+    assert create_pin.annotations.open_world_hint is True
+    assert create_pin.annotations.read_only_hint is False
+    list_boards = next(tool for tool in tools if tool.name == "list_boards")
+    assert list_boards.annotations.read_only_hint is True
 
 
 @pytest.mark.asyncio
@@ -69,6 +82,14 @@ async def test_unknown_tool_refused(mock_client: PinterestClient):
         data = json.loads(res[0].text)
         assert data["category"] == "security_error"
         assert "Unknown or unadvertised tool" in data["message"]
+
+
+@pytest.mark.asyncio
+async def test_failed_tool_call_sets_mcp_error_flag(mock_client: PinterestClient):
+    result = await _handle_call_tool(
+        None, types.CallToolRequestParams(name="unadvertised_tool", arguments={})
+    )
+    assert result.is_error is True
 
 
 @pytest.mark.asyncio

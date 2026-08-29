@@ -23,7 +23,7 @@ from starlette.routing import Mount, Route
 from starlette.types import Receive, Scope, Send
 
 from . import __version__
-from .app import get_lowlevel_server
+from .app import close_client, get_lowlevel_server
 from .config import Settings, Transport, load_settings
 from .event_store import InMemoryEventStore
 
@@ -48,7 +48,11 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
             auth_header = request.headers.get("Authorization", "")
             expected = f"Bearer {self.auth_token}"
             if not auth_header or not hmac.compare_digest(auth_header.encode(), expected.encode()):
-                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+                return JSONResponse(
+                    {"error": "Unauthorized"},
+                    status_code=401,
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
 
         return await call_next(request)
 
@@ -88,8 +92,11 @@ def create_http_app(settings: Settings | None = None) -> Starlette:
 
     @asynccontextmanager
     async def lifespan(app_instance: Starlette):
-        async with session_manager.run():
-            yield
+        try:
+            async with session_manager.run():
+                yield
+        finally:
+            await close_client()
 
     surfaces: dict[str, str] = {}
     routes: list[Route | Mount] = []
@@ -194,7 +201,14 @@ def create_http_app(settings: Settings | None = None) -> Starlette:
             }
         )
 
+    async def readyz(request: Request) -> JSONResponse:
+        """Report whether this instance is configured to serve Pinterest calls."""
+        if settings.pinterest_credentials_ready:
+            return JSONResponse({"status": "ready"})
+        return JSONResponse({"status": "not_ready"}, status_code=503)
+
     routes.insert(0, Route("/healthz", healthz, methods=["GET"]))
+    routes.insert(1, Route("/readyz", readyz, methods=["GET"]))
 
     middleware: list[Middleware] = []
 
@@ -216,7 +230,7 @@ def create_http_app(settings: Settings | None = None) -> Starlette:
             Middleware(
                 BearerAuthMiddleware,
                 auth_token=auth_token_str,
-                exempt_paths={"/healthz"},
+                exempt_paths={"/healthz", "/readyz"},
             )
         )
     elif settings.effective_auth_mode == "oauth":
@@ -230,6 +244,7 @@ def create_http_app(settings: Settings | None = None) -> Starlette:
             issuer=settings.oauth_issuer,  # type: ignore[arg-type]
             resource_url=settings.resource_url,
             jwks_url=settings.oauth_jwks_url,
+            allowed_subjects=settings.oauth_allowed_subjects,
         )
         middleware.append(
             Middleware(

@@ -153,6 +153,10 @@ class ToolSpec:
     description: str
     model: type[BaseToolInput]
     handler: Callable[[PinterestClient, Any], Awaitable[Any]]
+    read_only: bool = False
+    destructive: bool = False
+    idempotent: bool = False
+    open_world: bool = False
 
 
 REGISTRY: dict[str, ToolSpec] = {
@@ -165,18 +169,22 @@ REGISTRY: dict[str, ToolSpec] = {
         ),
         model=CreatePinInput,
         handler=lambda client, args: client.create_pin(**args.model_dump()),
+        open_world=True,
     ),
     "update_pin": ToolSpec(
         name="update_pin",
         description="Update metadata on an existing pin.",
         model=UpdatePinInput,
         handler=lambda client, args: client.update_pin(**args.model_dump(exclude_unset=True)),
+        open_world=True,
     ),
     "delete_pin": ToolSpec(
         name="delete_pin",
         description="Delete a pin.",
         model=DeletePinInput,
         handler=lambda client, args: client.delete_pin(args.pin_id),
+        destructive=True,
+        idempotent=True,
     ),
     "get_pin_analytics": ToolSpec(
         name="get_pin_analytics",
@@ -188,12 +196,14 @@ REGISTRY: dict[str, ToolSpec] = {
             end_date=args.end_date,
             metrics=args.metrics,
         ),
+        read_only=True,
     ),
     "list_boards": ToolSpec(
         name="list_boards",
         description="List your Pinterest boards.",
         model=ListBoardsInput,
         handler=lambda client, args: client.list_boards(privacy=args.privacy),
+        read_only=True,
     ),
     "create_board": ToolSpec(
         name="create_board",
@@ -204,6 +214,7 @@ REGISTRY: dict[str, ToolSpec] = {
             description=args.description,
             privacy=args.privacy,
         ),
+        open_world=True,
     ),
     "get_board_pins": ToolSpec(
         name="get_board_pins",
@@ -213,6 +224,7 @@ REGISTRY: dict[str, ToolSpec] = {
             board_id=args.board_id,
             page_size=args.page_size,
         ),
+        read_only=True,
     ),
     "search_pins": ToolSpec(
         name="search_pins",
@@ -222,6 +234,8 @@ REGISTRY: dict[str, ToolSpec] = {
             query=args.query,
             page_size=args.page_size,
         ),
+        read_only=True,
+        open_world=True,
     ),
     "get_account_analytics": ToolSpec(
         name="get_account_analytics",
@@ -232,6 +246,7 @@ REGISTRY: dict[str, ToolSpec] = {
             end_date=args.end_date,
             metrics=args.metrics,
         ),
+        read_only=True,
     ),
     "bulk_create_pins": ToolSpec(
         name="bulk_create_pins",
@@ -245,6 +260,7 @@ REGISTRY: dict[str, ToolSpec] = {
             pins=[p.model_dump() for p in args.pins],
             dry_run=args.dry_run,
         ),
+        open_world=True,
     ),
     "get_trending": ToolSpec(
         name="get_trending",
@@ -254,5 +270,7 @@ REGISTRY: dict[str, ToolSpec] = {
             interest=args.interest,
             region=args.region,
         ),
+        read_only=True,
+        open_world=True,
     ),
 }
