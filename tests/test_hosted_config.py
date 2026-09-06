@@ -113,6 +113,9 @@ def test_hosted_mode_valid_configuration():
     assert settings.is_local is False
     assert settings.pinterest_credentials_ready is True
     assert settings.database_url is not None
-    assert settings.database_url.get_secret_value() == "postgresql+asyncpg://app_user:secret_pw@postgres:5432/mcp"
+    assert (
+        settings.database_url.get_secret_value()
+        == "postgresql+asyncpg://app_user:secret_pw@postgres:5432/mcp"
+    )
     assert settings.redis_url is not None
     assert settings.credential_key_id == "primary"

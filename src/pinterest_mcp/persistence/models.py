@@ -70,17 +70,13 @@ class User(Base):
 
     __tablename__ = "users"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UniversalUUID, primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UniversalUUID, primary_key=True, default=uuid.uuid4)
     issuer: Mapped[str] = mapped_column(String(512), nullable=False)
     subject: Mapped[str] = mapped_column(String(256), nullable=False)
     provider_account_id: Mapped[str] = mapped_column(
         String(64), nullable=False, unique=True, index=True
     )
-    lifecycle_status: Mapped[str] = mapped_column(
-        String(32), nullable=False, default="active"
-    )
+    lifecycle_status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
@@ -98,9 +94,7 @@ class User(Base):
         "ImmediateOperation", back_populates="owner", cascade="all, delete-orphan"
     )
 
-    __table_args__ = (
-        UniqueConstraint("issuer", "subject", name="uq_users_issuer_subject"),
-    )
+    __table_args__ = (UniqueConstraint("issuer", "subject", name="uq_users_issuer_subject"),)
 
 
 class PinterestConnection(Base):
@@ -108,9 +102,7 @@ class PinterestConnection(Base):
 
     __tablename__ = "pinterest_connections"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UniversalUUID, primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UniversalUUID, primary_key=True, default=uuid.uuid4)
     owner_id: Mapped[uuid.UUID] = mapped_column(
         UniversalUUID,
         ForeignKey("users.id", ondelete="CASCADE"),
@@ -118,9 +110,7 @@ class PinterestConnection(Base):
         unique=True,
         index=True,
     )
-    provider_account_id: Mapped[str] = mapped_column(
-        String(64), nullable=False, index=True
-    )
+    provider_account_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     account_username: Mapped[str | None] = mapped_column(String(256), nullable=True)
     account_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
     encrypted_access_token: Mapped[str] = mapped_column(Text, nullable=False)
@@ -157,15 +147,11 @@ class OAuthCompletionReceipt(Base):
     )
     provider_account_id: Mapped[str] = mapped_column(String(64), nullable=False)
     payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)  # SHA-256
-    status: Mapped[str] = mapped_column(
-        String(32), nullable=False, default="completed"
-    )
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="completed")
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
-    expires_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+    expires_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     owner: Mapped[User] = relationship("User", back_populates="receipts")
 

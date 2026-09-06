@@ -244,10 +244,12 @@ class ConnectionRepository:
         await lock_account(self.session, conn.provider_account_id)
         await self.session.refresh(conn)
         await self.session.execute(
-            update(PendingCredential).where(
+            update(PendingCredential)
+            .where(
                 PendingCredential.provider_account_id == conn.provider_account_id,
                 PendingCredential.status == "pending",
-            ).values(encrypted_payload=None, status="cancelled")
+            )
+            .values(encrypted_payload=None, status="cancelled")
         )
 
         # Overwrite ciphertext with tombstone marker (safe against token leakage)

@@ -97,9 +97,7 @@ async def test_user_and_connection_creation_and_cascade(session_factory):
 
     # Query back and verify relationships
     async with session_factory() as session:
-        result = await session.execute(
-            select(User).where(User.id == user_id)
-        )
+        result = await session.execute(select(User).where(User.id == user_id))
         queried_user = result.scalar_one()
         assert queried_user.provider_account_id == "111222333444555666"
 
@@ -205,6 +203,7 @@ async def test_concurrent_account_creation_race(session_factory):
 
     Only one must succeed; the loser must encounter an IntegrityError.
     """
+
     async def try_create(subject: str) -> bool:
         async with session_factory() as session:
             try:
