@@ -108,7 +108,7 @@ async def test_unknown_argument_rejected(mock_client: PinterestClient):
 @pytest.mark.asyncio
 async def test_credential_shaped_argument_rejected_without_leaking(mock_client: PinterestClient):
     with patch.object(mock_client, "_request") as mock_req:
-        secret_arg = "pina_secret12345678901234567890"
+        secret_arg = "pina_secret12345678901234567890"  # gitleaks:allow -- fake rejection fixture
         res = await call_tool(
             "list_boards",
             {"PINTEREST_ACCESS_TOKEN": secret_arg},

@@ -21,9 +21,52 @@ bandit-results.json
 !.env.template
 .pinterest_token.json
 
-# OpenSpec workflow files
-openspec/
+# Reviewed OpenSpec context and active Pinterest implementation plans
+openspec/*
+!openspec/config.yaml
+!openspec/specs/
+!openspec/changes/
+openspec/changes/*
+!openspec/changes/pinterest-login-and-actions-deployment/
+!openspec/changes/hosted-pinterest-oauth-and-scheduling/
 .openspec/
+
+# Private deployment material; commit templates and helper source only
+deploy/**/secrets/
+deploy/**/data/
+deploy/**/backups/
+deploy/**/realm.json
+deploy/**/runtime/
+*.key
+*.pem
+*.p12
+*.pfx
+*.dump
+*.sql.gz
+tokens/
+
+# uv local cache
+.uv-cache/
+
+# IDE / OS metadata
+.vscode/
+.idea/
+.DS_Store
+
+# Runtime logs / process files
+*.log
+*.pid
+*.seed
+
+# Keycloak broker build artifacts
+keycloak-broker-extension/target/
+keycloak-broker-extension/.classpath
+keycloak-broker-extension/.project
+keycloak-broker-extension/.settings/
+keycloak-broker-extension/*.iml
+
+# Smoke / verification output (may include test identities)
+deploy/**/verification-result.json
 
 # AI Agent directories & workspace metadata
 .agent/
@@ -33,3 +76,6 @@ openspec/
 .cursor/
 .devin/
 .gemini/
+
+# Host-specific authentication-spike configuration is private, not a deployment release.
+/deploy/pheniox/
