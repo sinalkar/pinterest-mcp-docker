@@ -253,7 +253,8 @@ class ConnectionRepository:
         )
 
         # Overwrite ciphertext with tombstone marker (safe against token leakage)
-        conn.encrypted_access_token = "REVOKED_AND_DISCONNECTED"  # noqa: S105
+        # This literal destroys credential usability; it is not an authentication secret.
+        conn.encrypted_access_token = "REVOKED_AND_DISCONNECTED"  # noqa: S105  # nosec B105
         conn.encrypted_refresh_token = None
         conn.status = "disconnected"
         conn.credential_version += 1
