@@ -1,0 +1,3 @@
+# Public, reviewed planning artifacts only; keep other local OpenSpec state private.
+*
+!.gitignore

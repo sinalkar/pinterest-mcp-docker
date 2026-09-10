@@ -1,0 +1,12 @@
+# Only reviewed broker source and build configuration belong in this context.
+*
+!Dockerfile
+!pom.xml
+!src/
+!src/**
+**/.env*
+**/*.key
+**/*.pem
+**/*.p12
+**/*.pfx
+**/*.log

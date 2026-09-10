@@ -420,14 +420,22 @@ For clients requiring the 2024-11-05 HTTP+SSE transport:
 
 ## ⚙️ Environment Variables Reference
 
+Hosted Pinterest login is under development. The persistence and broker foundation is not yet an end-to-end hosted release; keep public user access disabled until the OpenSpec acceptance checks and GitHub Actions deployment are complete. See [pending credential handoff](docs/pending-credential-handoff.md).
+
 | Variable | Purpose | Required | Default | Secret |
 | -------- | ------- | -------- | ------- | ------ |
+| `MCP_MODE` | Deployment mode (`local` for single-user CLI/file tokens, `hosted` for multi-user external persistence) | No | `local` | No |
 | `MCP_TRANSPORT` | Transport mode (`stdio`, `http`, `sse`, `http+sse`) | No | `stdio` | No |
 | `MCP_HOST` | Bind address for HTTP listener | No | `127.0.0.1` | No |
 | `MCP_PORT` | Listen port for HTTP listener | No | `8080` | No |
 | `MCP_PATH` | Streamable HTTP endpoint path | No | `/mcp` | No |
 | `MCP_SSE_PATH` | SSE stream endpoint path | No | `/sse` | No |
 | `MCP_MESSAGE_PATH` | SSE message posting endpoint path | No | `/messages/` | No |
+| `DATABASE_URL` | PostgreSQL connection URL for hosted credential and owner persistence | Required in hosted mode | None | **Yes** |
+| `REDIS_URL` | Redis URL for hosted nonce replay protection and rate budgets | No | None | **Yes** |
+| `CREDENTIAL_ENCRYPTION_KEY` | Authenticated encryption root key material for hosted credential storage | Required in hosted mode | None | **Yes** |
+| `CREDENTIAL_KEY_ID` | Key identifier for versioned credential encryption keys | No | `primary` | No |
+| `BROKER_HANDOFF_SECRET` | Shared HMAC secret for private broker-to-ingress credential handoff | Required in hosted mode | None | **Yes** |
 | `MCP_AUTH_TOKEN` | Shared Bearer authentication token | Conditional | None | **Yes** |
 | `MCP_JSON_RESPONSE` | Return single JSON response instead of SSE stream | No | `false` | No |
 | `MCP_STATELESS` | Sessionless mode (no per-client session state) | No | `false` | No |

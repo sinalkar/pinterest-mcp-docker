@@ -25,6 +25,10 @@ SECRET_ENV_VARS = frozenset(
         "PINTEREST_ACCESS_TOKEN",
         "PINTEREST_REFRESH_TOKEN",
         "MCP_AUTH_TOKEN",
+        "DATABASE_URL",
+        "REDIS_URL",
+        "CREDENTIAL_ENCRYPTION_KEY",
+        "BROKER_HANDOFF_SECRET",
     }
 )
 
@@ -69,6 +73,9 @@ class Settings(BaseSettings):
         extra="ignore",
         validate_default=True,
     )
+
+    # -- deployment mode -----------------------------------------------
+    mode: Literal["local", "hosted"] = Field(default="local", alias="MCP_MODE")
 
     # -- transport -----------------------------------------------------
     transport: Transport = Field(default=Transport.STDIO, alias="MCP_TRANSPORT")
@@ -136,6 +143,15 @@ class Settings(BaseSettings):
     max_image_bytes: Annotated[int, Field(gt=0, le=64 * 1024 * 1024)] = Field(
         default=10 * 1024 * 1024, alias="PINTEREST_MAX_IMAGE_BYTES"
     )
+
+    # -- hosted persistence & secrets (design D3) ----------------------
+    database_url: SecretStr | None = Field(default=None, alias="DATABASE_URL")
+    redis_url: SecretStr | None = Field(default=None, alias="REDIS_URL")
+    credential_encryption_key: SecretStr | None = Field(
+        default=None, alias="CREDENTIAL_ENCRYPTION_KEY"
+    )
+    credential_key_id: str = Field(default="primary", alias="CREDENTIAL_KEY_ID")
+    broker_handoff_secret: SecretStr | None = Field(default=None, alias="BROKER_HANDOFF_SECRET")
 
     # -- outbound HTTP -------------------------------------------------
     http_timeout: Annotated[float, Field(gt=0, le=300)] = Field(
@@ -208,6 +224,35 @@ class Settings(BaseSettings):
                 "MCP_AUTH_TOKEN and MCP_OAUTH_ISSUER are mutually exclusive: choose a "
                 "shared bearer token or OAuth resource-server mode, not both."
             )
+        return self
+
+    @model_validator(mode="after")
+    def _hosted_mode_restrictions(self) -> Settings:
+        """Enforce multi-user isolation and external persistence rules in hosted mode."""
+        if self.mode == "hosted":
+            if self.auth_token is not None:
+                raise ValueError(
+                    "MCP_AUTH_TOKEN is forbidden in hosted mode; shared bearer auth cannot "
+                    "isolate multi-user accounts. Use MCP_OAUTH_ISSUER."
+                )
+            if self.access_token is not None:
+                raise ValueError(
+                    "PINTEREST_ACCESS_TOKEN is forbidden in hosted mode; process-global "
+                    "operator credentials cannot be used for multi-user dispatch."
+                )
+            if self.refresh_token is not None:
+                raise ValueError(
+                    "PINTEREST_REFRESH_TOKEN is forbidden in hosted mode; process-global "
+                    "operator credentials cannot be used for multi-user dispatch."
+                )
+            if self.oauth_issuer is None:
+                raise ValueError(
+                    "MCP_OAUTH_ISSUER is required in hosted mode to verify request identities."
+                )
+            if self.database_url is None:
+                raise ValueError(
+                    "DATABASE_URL is required in hosted mode for external credential persistence."
+                )
         return self
 
     @model_validator(mode="after")
@@ -299,14 +344,26 @@ class Settings(BaseSettings):
         return self.allow_local_paths
 
     @property
+    def is_hosted(self) -> bool:
+        return self.mode == "hosted"
+
+    @property
+    def is_local(self) -> bool:
+        return self.mode == "local"
+
+    @property
     def pinterest_credentials_ready(self) -> bool:
         """Whether the server has a credential source it can use for Pinterest.
 
         This deliberately validates configuration only; readiness must not make
-        a network call to Pinterest or expose a credential value.  A saved token
-        file is accepted only when it contains a non-empty access token, or a
-        refresh token together with the client credentials needed to exchange it.
+        a network call to Pinterest or expose a credential value. In hosted mode,
+        readiness checks database and OAuth issuer configuration without requiring
+        a local token file. In local mode, a saved token file or direct credentials
+        are checked.
         """
+        if self.is_hosted:
+            return bool(self.database_url and self.oauth_issuer)
+
         access_token = self.access_token.get_secret_value() if self.access_token else ""
         refresh_token = self.refresh_token.get_secret_value() if self.refresh_token else ""
         client_id = self.client_id.get_secret_value() if self.client_id else ""

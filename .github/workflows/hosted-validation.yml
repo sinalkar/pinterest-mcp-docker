@@ -1,0 +1,103 @@
+name: Hosted Validation
+
+'on':
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_call:
+    outputs:
+      tested_sha:
+        description: Exact source commit validated by both hosted jobs
+        value: ${{ jobs.verified.outputs.tested_sha }}
+
+# No registry, deployment, environment or production credentials in these jobs.
+permissions:
+  contents: read
+
+jobs:
+  persistence:
+    name: PostgreSQL and Redis integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: disposable-ci-only
+          POSTGRES_DB: hosted_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d hosted_test"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+      redis:
+        image: redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      PENDING_TEST_DATABASE_URL: postgresql+asyncpg://postgres:disposable-ci-only@127.0.0.1:5432/hosted_test
+      PENDING_TEST_REDIS_URL: redis://127.0.0.1:6379/0
+      PENDING_TEST_REQUIRE_MIGRATIONS: '1'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: '0.11.8'
+          enable-cache: false
+      - name: Install locked hosted test dependencies
+        run: uv sync --frozen --extra dev
+      - name: Verify fresh and additive PostgreSQL migrations
+        run: uv run --no-sync python scripts/verify_hosted_migrations.py
+      - name: Run real service tests without metadata.create_all fallback
+        run: uv run --no-sync pytest tests/test_pending_credentials.py -q
+
+  broker:
+    name: Java broker and container build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Lint hosted workflow
+        run: >-
+          docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges
+          -v "$GITHUB_WORKSPACE:/repo:ro" -w /repo
+          rhysd/actionlint:1.7.7@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9
+          .github/workflows/hosted-validation.yml
+      - name: Test broker including Keycloak context serialization
+        working-directory: keycloak-broker-extension
+        run: mvn --batch-mode --no-transfer-progress verify
+      - name: Build the broker container without publishing
+        run: docker build --tag pinterest-broker-validation keycloak-broker-extension
+
+  verified:
+    name: Hosted validation gate
+    needs: [persistence, broker]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      tested_sha: ${{ steps.source.outputs.tested_sha }}
+    steps:
+      - id: source
+        name: Record tested source commit
+        env:
+          TESTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          [[ "$TESTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          echo "tested_sha=$TESTED_SHA" >> "$GITHUB_OUTPUT"
+          printf 'Hosted validation passed for %s. No deployment performed.\n' "$TESTED_SHA" >> "$GITHUB_STEP_SUMMARY"
