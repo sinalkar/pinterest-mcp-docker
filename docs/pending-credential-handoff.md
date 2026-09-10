@@ -22,3 +22,10 @@ The ASGI factory is `pinterest_mcp.persistence.ingress_app.create_credential_ing
 - The Java suite uses Keycloak's actual `SerializedBrokeredIdentityContext` to verify serialized session notes contain no sentinel access or refresh token. It also checks stage failure and reference-only first/return-login completion.
 
 These checks do not replace real browser/Pinterest callback acceptance, full Keycloak federation failure recovery, or private TLS/network deployment verification. No live Pins are created by these tests.
+
+
+## Automated hosted validation
+
+`.github/workflows/hosted-validation.yml` runs on PRs and main and can be called by a future release workflow. It checks the exact source SHA, uses immutable action and database-service references, and grants only repository read access. It does not use GitHub environment secrets, publish images, or connect to the deployment host.
+
+The PostgreSQL job first runs `scripts/verify_hosted_migrations.py` against an empty disposable database, checks that an existing owner survives the additive upgrade, then runs the real PostgreSQL/Redis tests with automatic table creation disabled. The Java job runs the broker suite, workflow lint and container build. Only both successful jobs expose the `tested_sha` output. Existing CI/security/container gates are still required separately; this output alone does not authorize deployment.

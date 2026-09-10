@@ -29,8 +29,9 @@ ISSUER = "https://auth.example.com/realms/pinterest"
 async def store(tmp_path):
     url = os.environ.get("PENDING_TEST_DATABASE_URL", f"sqlite+aiosqlite:///{tmp_path}/pending.db")
     engine = create_async_engine(url)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    if os.environ.get("PENDING_TEST_REQUIRE_MIGRATIONS") != "1":
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     yield factory
     await engine.dispose()
